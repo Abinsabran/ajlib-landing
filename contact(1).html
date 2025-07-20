@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>تواصل معنا - أجلب</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <h1>تواصل معنا</h1>
+        <nav>
+            <a href="index.html">الرئيسية</a>
+            <a href="about.html">من نحن</a>
+            <a href="contact.html">تواصل معنا</a>
+            <a href="index-en.html">English</a>
+        </nav>
+    </header>
+
+    <main>
+        <section class="contact-form">
+            <h2>نحن هنا لمساعدتك!</h2>
+            <form action="mailto:support@ajlib.com" method="post" enctype="text/plain">
+                <label for="name">الاسم:</label><br>
+                <input type="text" id="name" name="name" required><br><br>
+
+                <label for="email">البريد الإلكتروني:</label><br>
+                <input type="email" id="email" name="email" required><br><br>
+
+                <label for="message">رسالتك:</label><br>
+                <textarea id="message" name="message" rows="5" required></textarea><br><br>
+
+                <button type="submit">إرسال</button>
+            </form>
+        </section>
+    </main>
+
+    <footer>
+        جميع الحقوق محفوظة © أجلب 2025
+    </footer>
+</body>
+</html>
