@@ -1,80 +1,36 @@
-/* إعداد الخط العام والاتجاه */
 body {
-    font-family: 'Cairo', sans-serif;
-    direction: rtl;
+    background-color: #f2fefb;
+    font-family: 'Tahoma', sans-serif;
+    color: #222;
     margin: 0;
     padding: 0;
-    background-color: #f6fdf8;
-    color: #2c3e50;
 }
-
-/* رأس الصفحة */
-header {
-    background-color: #d4f5e6;
+header, footer {
+    background-color: #d4f7e9;
     padding: 20px;
     text-align: center;
-    border-bottom: 1px solid #ccc;
 }
-
-header h1 {
-    margin: 0;
-    font-size: 28px;
-}
-
-nav {
-    margin-top: 10px;
-}
-
 nav a {
     margin: 0 10px;
     text-decoration: none;
-    color: #2c3e50;
-    font-weight: bold;
+    color: #006f4b;
 }
-
-nav a:hover {
-    color: #1abc9c;
-}
-
-/* القسم التعريفي */
 .intro {
+    padding: 20px;
     text-align: center;
-    padding: 40px 20px;
-    background-color: #ffffff;
-    margin: 20px;
-    border-radius: 10px;
 }
-
-/* الشبكة */
 .products {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
     gap: 20px;
     padding: 20px;
-    margin: 0 20px;
 }
-
-/* البطاقة */
 .card {
-    background-color: #eafaf1;
-    padding: 20px;
+    background-color: #ffffff;
+    border: 1px solid #ccc;
+    padding: 15px 25px;
     border-radius: 10px;
+    width: 150px;
     text-align: center;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    font-weight: bold;
-    transition: 0.3s ease-in-out;
-}
-
-.card:hover {
-    transform: scale(1.03);
-    background-color: #d2f2df;
-}
-
-/* التذييل */
-footer {
-    text-align: center;
-    padding: 20px;
-    background-color: #d4f5e6;
-    margin-top: 40px;
-    border-top: 1px solid #ccc;
 }
