@@ -11,6 +11,19 @@
       background: url('background.jpg') no-repeat center center fixed;
       background-size: cover;
     }
+    nav {
+      background-color: #004c3f;
+      color: white;
+      padding: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    nav a {
+      color: white;
+      margin: 0 10px;
+      text-decoration: none;
+    }
     .product-card {
       background-color: white;
       border-radius: 12px;
@@ -44,8 +57,24 @@
   </style>
 </head>
 <body>
+
+<nav>
+  <div>Ajlib Store | متجر أجلب</div>
+  <div>
+    <a href="index.html">الرئيسية</a>
+    <a href="about.html">من نحن</a>
+    <a href="about-en.html">About</a>
+    <a href="contact.html">اتصل بنا</a>
+    <a href="contact-en.html">Contact</a>
+    <a href="privacy.html">الخصوصية</a>
+    <a href="privacy-en.html">Privacy</a>
+    <a href="terms.html">الشروط</a>
+    <a href="terms-en.html">Terms</a>
+  </div>
+</nav>
+
 <div id="app">
-  <h1 style="text-align:center;">مرحبا بك في متجر أجلب</h1>
+  <h1 style="text-align:center; color:#004c3f">مرحباً بك في متجر أجلب</h1>
 
   <div style="display:flex; flex-wrap:wrap; justify-content:center;">
     <div class="product-card" v-for="(product, index) in products" :key="index">
@@ -103,7 +132,7 @@
         form.method = 'POST';
         form.action = 'https://secure.paytabs.sa/payment/request';
         const fields = {
-          merchant_email: 'demo@paytabs.com',
+          merchant_email: 'support@ajlib.store',
           secret_key: 'demo',
           site_url: 'https://ajlib.store',
           return_url: 'https://ajlib.store/thankyou.html',
@@ -131,5 +160,6 @@
     }
   });
 </script>
+
 </body>
 </html>
