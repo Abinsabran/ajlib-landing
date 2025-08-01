@@ -1,15 +1,13 @@
 <!DOCTYPE html>
-<html lang="ar">
+<html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <title>أجلب - متجر إلكتروني</title>
-  <script src="https://cdn.jsdelivr.net/npm/vue@2"></script>
+  <title>الصفحة الرئيسية - أجلب</title>
   <style>
     body {
       margin: 0;
       font-family: 'Tahoma', sans-serif;
-      background: url('background.jpg') no-repeat center center fixed;
-      background-size: cover;
+      background-color: #f8f8f8;
     }
     nav {
       background-color: #004c3f;
@@ -24,142 +22,121 @@
       margin: 0 10px;
       text-decoration: none;
     }
-    .product-card {
-      background-color: white;
+    h1 {
+      text-align: center;
+      color: #004c3f;
+      margin-top: 30px;
+    }
+    .products {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 20px;
+      padding: 20px;
+    }
+    .product {
+      background: white;
       border-radius: 12px;
-      padding: 15px;
-      margin: 15px;
-      width: 230px;
-      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      padding: 20px;
+      width: 250px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      text-align: center;
     }
-    img {
+    .product img {
+      max-width: 100%;
+      height: 180px;
+      object-fit: contain;
+    }
+    .product select, .product button {
+      margin-top: 10px;
+      padding: 8px;
       width: 100%;
-    }
-    .cart {
-      background-color: #f9f9f9;
-      padding: 15px;
-      border-radius: 10px;
     }
     button {
-      background-color: #007b5e;
+      background-color: #006d5b;
       color: white;
       border: none;
-      padding: 10px;
-      margin-top: 10px;
-      border-radius: 5px;
       cursor: pointer;
+      border-radius: 5px;
     }
-    input, select {
-      padding: 8px;
-      margin-bottom: 10px;
-      width: 100%;
+    footer {
+      text-align: center;
+      padding: 20px;
+      background: #004c3f;
+      color: white;
+      margin-top: 40px;
     }
   </style>
 </head>
 <body>
 
 <nav>
-  <div>Ajlib Store | متجر أجلب</div>
+  <div>متجر أجلب | Ajlib Store</div>
   <div>
     <a href="index.html">الرئيسية</a>
     <a href="about.html">من نحن</a>
-    <a href="about-en.html">About</a>
     <a href="contact.html">اتصل بنا</a>
-    <a href="contact-en.html">Contact</a>
     <a href="privacy.html">الخصوصية</a>
-    <a href="privacy-en.html">Privacy</a>
     <a href="terms.html">الشروط</a>
-    <a href="terms-en.html">Terms</a>
   </div>
 </nav>
 
-<div id="app">
-  <h1 style="text-align:center; color:#004c3f">مرحباً بك في متجر أجلب</h1>
+<h1>مرحباً بك في متجر أجلب</h1>
 
-  <div style="display:flex; flex-wrap:wrap; justify-content:center;">
-    <div class="product-card" v-for="(product, index) in products" :key="index">
-      <img :src="product.image" :alt="product.name">
-      <h3>{{ product.name }}</h3>
-      <p>{{ product.price }} درهم</p>
-      <select v-model="product.selectedSize">
-        <option v-for="size in sizes" :value="size">{{ size }}</option>
-      </select>
-      <button @click="addToCart(product)">أضف إلى السلة</button>
-    </div>
+<div class="products">
+  <div class="product">
+    <img src="gray.png" alt="شورت داخلي - رصاصي">
+    <h3>شورت داخلي - رصاصي</h3>
+    <p>17 درهم</p>
+    <select>
+      <option>M</option>
+      <option>L</option>
+      <option>XL</option>
+      <option>XXL</option>
+    </select>
+    <button>أضف إلى السلة</button>
   </div>
-
-  <div class="cart" v-if="cart.length" style="margin: 20px;">
-    <h2>سلة التسوق</h2>
-    <ul>
-      <li v-for="(item, index) in cart" :key="index">
-        {{ item.name }} - المقاس: {{ item.selectedSize }} - {{ item.price }} درهم
-        <button @click="removeFromCart(index)">حذف</button>
-      </li>
-    </ul>
-
-    <h3>معلومات العميل</h3>
-    <input type="text" v-model="customer.name" placeholder="الاسم الكامل" required>
-    <input type="tel" v-model="customer.phone" placeholder="رقم الهاتف" required>
-    <input type="text" v-model="customer.address" placeholder="العنوان الكامل" required>
-    <button @click="redirectToPayTabs">الدفع الآن</button>
+  <div class="product">
+    <img src="white.png" alt="شورت داخلي - أبيض">
+    <h3>شورت داخلي - أبيض</h3>
+    <p>17 درهم</p>
+    <select>
+      <option>M</option>
+      <option>L</option>
+      <option>XL</option>
+      <option>XXL</option>
+    </select>
+    <button>أضف إلى السلة</button>
+  </div>
+  <div class="product">
+    <img src="navy.png" alt="شورت داخلي - أزرق غامق">
+    <h3>شورت داخلي - أزرق غامق</h3>
+    <p>17 درهم</p>
+    <select>
+      <option>M</option>
+      <option>L</option>
+      <option>XL</option>
+      <option>XXL</option>
+    </select>
+    <button>أضف إلى السلة</button>
+  </div>
+  <div class="product">
+    <img src="black.png" alt="شورت داخلي - أسود">
+    <h3>شورت داخلي - أسود</h3>
+    <p>17 درهم</p>
+    <select>
+      <option>M</option>
+      <option>L</option>
+      <option>XL</option>
+      <option>XXL</option>
+    </select>
+    <button>أضف إلى السلة</button>
   </div>
 </div>
 
-<script>
-  new Vue({
-    el: '#app',
-    data: {
-      sizes: ['M', 'L', 'XL', 'XXL'],
-      products: [
-        { name: 'شورت داخلي - رصاصي', price: 17, image: 'gray.png', selectedSize: 'M' },
-        { name: 'شورت داخلي - أبيض', price: 17, image: 'white.png', selectedSize: 'M' },
-        { name: 'شورت داخلي - أزرق غامق', price: 17, image: 'navy.png', selectedSize: 'M' },
-        { name: 'شورت داخلي - أسود', price: 17, image: 'black.png', selectedSize: 'M' }
-      ],
-      cart: [],
-      customer: { name: '', phone: '', address: '' }
-    },
-    methods: {
-      addToCart(product) {
-        this.cart.push({ ...product });
-      },
-      removeFromCart(index) {
-        this.cart.splice(index, 1);
-      },
-      redirectToPayTabs() {
-        const amount = this.cart.reduce((sum, item) => sum + item.price, 0);
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = 'https://secure.paytabs.sa/payment/request';
-        const fields = {
-          merchant_email: 'support@ajlib.store',
-          secret_key: 'demo',
-          site_url: 'https://ajlib.store',
-          return_url: 'https://ajlib.store/thankyou.html',
-          title: 'طلب من متجر أجلب',
-          cc_first_name: this.customer.name,
-          phone_number: this.customer.phone,
-          billing_address: this.customer.address,
-          city: 'Abu Dhabi',
-          country: 'ARE',
-          amount: amount,
-          currency: 'AED',
-          msg_lang: 'arabic',
-          product_name: this.cart.map(p => p.name).join(', ')
-        };
-        for (let key in fields) {
-          const input = document.createElement('input');
-          input.type = 'hidden';
-          input.name = key;
-          input.value = fields[key];
-          form.appendChild(input);
-        }
-        document.body.appendChild(form);
-        form.submit();
-      }
-    }
-  });
-</script>
+<footer>
+  جميع الحقوق محفوظة &copy; أجلب 2025
+</footer>
 
 </body>
 </html>
