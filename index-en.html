@@ -1,34 +1,139 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Ajlib - Home</title>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <title>Ajlib Store | Home</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Tahoma', sans-serif;
+      background-color: #f0fffa;
+    }
+    header {
+      background-color: #c6f6e4;
+      padding: 20px 0;
+      text-align: center;
+    }
+    nav {
+      margin-top: 10px;
+    }
+    nav a {
+      margin: 0 15px;
+      color: #004c3f;
+      text-decoration: none;
+      font-weight: bold;
+    }
+    .products {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      padding: 30px;
+    }
+    .product {
+      border: 1px solid #ccc;
+      border-radius: 12px;
+      padding: 20px;
+      margin: 10px;
+      width: 220px;
+      background-color: white;
+      box-shadow: 0 0 10px rgba(0,0,0,0.05);
+    }
+    .product img {
+      width: 100%;
+      height: auto;
+      border-radius: 8px;
+    }
+    .product select, .product button {
+      width: 100%;
+      margin-top: 10px;
+      padding: 8px;
+      border-radius: 5px;
+      border: 1px solid #004c3f;
+    }
+    .product button {
+      background-color: #004c3f;
+      color: white;
+      cursor: pointer;
+      border: none;
+    }
+    footer {
+      text-align: center;
+      padding: 20px;
+      background-color: #c6f6e4;
+      margin-top: 50px;
+    }
+  </style>
 </head>
 <body>
-   <header>
-    <img src="logo.png" alt="Ajlib Logo" style="height: 60px;">
-    <h1>Welcome to Ajlib</h1>
+  <header>
+    <img src="logo.png" alt="Ajlib Logo" height="50">
+    <h1>Welcome to Ajlib | مرحباً بك في متجر أجلب</h1>
     <nav>
-        <a href="index-en.html">Home</a>
-        <a href="about-en.html">About</a>
-        <a href="contact-en.html">Contact</a>
-        <a href="index.html">العربية</a>
+      <a href="index.html">Home</a>
+      <a href="about-en.html">About</a>
+      <a href="contact-en.html">Contact</a>
+      <a href="privacy-en.html">Privacy</a>
+      <a href="terms-en.html">Terms</a>
+      <a href="index-ar.html">العربية</a>
     </nav>
-</header>
-    <main>
-        <section class="intro">
-            <h2>The best buying & selling platform</h2>
-            <p>Browse our products easily and comfortably</p>
-        </section>
-        <section class="products">
-            <div class="card">Product 1</div>
-            <div class="card">Product 2</div>
-            <div class="card">Product 3</div>
-        </section>
-    </main>
-    <footer>
-        All rights reserved © Ajlib 2025
-    </footer>
+  </header>
+
+  <section class="products">
+    <div class="product">
+      <img src="gray.png" alt="شورت داخلي - رصاصي">
+      <h3>شورت داخلي - رصاصي</h3>
+      <p>17 درهم</p>
+      <select>
+        <option value="M">M</option>
+        <option value="L">L</option>
+        <option value="XL">XL</option>
+        <option value="XXL">XXL</option>
+      </select>
+      <button>أضف إلى السلة</button>
+    </div>
+
+    <div class="product">
+      <img src="white.png" alt="شورت داخلي - أبيض">
+      <h3>شورت داخلي - أبيض</h3>
+      <p>17 درهم</p>
+      <select>
+        <option value="M">M</option>
+        <option value="L">L</option>
+        <option value="XL">XL</option>
+        <option value="XXL">XXL</option>
+      </select>
+      <button>أضف إلى السلة</button>
+    </div>
+
+    <div class="product">
+      <img src="navy.png" alt="شورت داخلي - أزرق غامق">
+      <h3>شورت داخلي - أزرق غامق</h3>
+      <p>17 درهم</p>
+      <select>
+        <option value="M">M</option>
+        <option value="L">L</option>
+        <option value="XL">XL</option>
+        <option value="XXL">XXL</option>
+      </select>
+      <button>أضف إلى السلة</button>
+    </div>
+
+    <div class="product">
+      <img src="black.png" alt="شورت داخلي - أسود">
+      <h3>شورت داخلي - أسود</h3>
+      <p>17 درهم</p>
+      <select>
+        <option value="M">M</option>
+        <option value="L">L</option>
+        <option value="XL">XL</option>
+        <option value="XXL">XXL</option>
+      </select>
+      <button>أضف إلى السلة</button>
+    </div>
+  </section>
+
+  <footer>
+    All rights reserved © Ajlib 2025 | جميع الحقوق محفوظة
+  </footer>
 </body>
 </html>
