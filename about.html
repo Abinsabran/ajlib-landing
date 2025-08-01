@@ -1,15 +1,13 @@
 <!DOCTYPE html>
-<html lang="ar">
+<html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <title>من نحن - متجر أجلب</title>
+  <title>About | من نحن</title>
   <style>
     body {
       margin: 0;
       font-family: 'Tahoma', sans-serif;
-      background: url('background.jpg') no-repeat center center fixed;
-      background-size: cover;
-      direction: rtl;
+      background-color: #f8f8f8;
     }
     nav {
       background-color: #004c3f;
@@ -18,22 +16,31 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
+      flex-wrap: wrap;
     }
     nav a {
       color: white;
       margin: 0 10px;
       text-decoration: none;
     }
+    h1 {
+      text-align: center;
+      color: #004c3f;
+      margin-top: 30px;
+    }
     .content {
       padding: 30px;
+      font-size: 18px;
+      line-height: 1.7;
       max-width: 900px;
       margin: auto;
-      background: rgba(255,255,255,0.9);
-      border-radius: 12px;
-      margin-top: 40px;
     }
-    h1 {
-      color: #004c3f;
+    footer {
+      text-align: center;
+      padding: 20px;
+      background: #004c3f;
+      color: white;
+      margin-top: 40px;
     }
   </style>
 </head>
@@ -42,25 +49,27 @@
 <nav>
   <div>Ajlib Store | متجر أجلب</div>
   <div>
-    <a href="index.html">الرئيسية</a>
-    <a href="about.html">من نحن</a>
-    <a href="about-en.html">About</a>
-    <a href="contact.html">اتصل بنا</a>
-    <a href="contact-en.html">Contact</a>
-    <a href="privacy.html">الخصوصية</a>
-    <a href="privacy-en.html">Privacy</a>
-    <a href="terms.html">الشروط</a>
-    <a href="terms-en.html">Terms</a>
+    <a href="index.html">Home | الرئيسية</a>
+    <a href="about.html">About | من نحن</a>
+    <a href="contact.html">Contact | اتصل بنا</a>
+    <a href="#">Privacy | الخصوصية</a>
+    <a href="#">Terms | الشروط</a>
   </div>
 </nav>
 
+<h1>About Us | من نحن</h1>
+
 <div class="content">
-  <h1>من نحن</h1>
   <p>
-    متجر <strong>أجلب</strong> هو منصة إماراتية إلكترونية تم تطويرها لتقديم منتجات عالية الجودة بأسعار مناسبة، مع التركيز على البساطة وسهولة الاستخدام.
-    هدفنا هو توفير تجربة تسوق موثوقة وسريعة لعملائنا داخل دولة الإمارات وخارجها. نحن نؤمن بأن كل عميل يستحق خدمة ممتازة ومنتج ذو جودة عالية، وهذا ما نحرص عليه في كل عملية شراء.
+    Ajlib is a modern Emirati online store that offers high-quality products to customers across the UAE. We believe in making shopping simple, fast, and reliable.
+    <br><br>
+    أجلب هو متجر إلكتروني إماراتي حديث يقدم منتجات عالية الجودة للعملاء في جميع أنحاء الإمارات. نحن نؤمن بجعل تجربة التسوق بسيطة وسريعة وموثوقة.
   </p>
 </div>
+
+<footer>
+  جميع الحقوق محفوظة &copy; Ajlib 2025 | All rights reserved
+</footer>
 
 </body>
 </html>
