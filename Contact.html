@@ -2,11 +2,11 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <title>Contact | اتصل بنا</title>
+  <title>Contact Us | اتصل بنا - Ajlib Store</title>
   <style>
     body {
       margin: 0;
-      font-family: 'Tahoma', sans-serif;
+      font-family: Tahoma, sans-serif;
       background-color: #f1fcf9;
     }
     nav {
@@ -28,15 +28,35 @@
       color: #005e4f;
       margin-top: 30px;
     }
-    .content {
+    .form-container {
+      background-color: white;
+      max-width: 700px;
+      margin: 30px auto;
       padding: 30px;
-      font-size: 18px;
-      line-height: 1.7;
-      max-width: 900px;
-      margin: auto;
-      background-color: #ffffff;
-      border-radius: 8px;
-      box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.05);
+    }
+    label {
+      display: block;
+      margin: 10px 0 5px;
+      text-align: right;
+    }
+    input, textarea {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 15px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+      font-size: 16px;
+    }
+    button {
+      background-color: #005e4f;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      border-radius: 5px;
     }
     footer {
       text-align: center;
@@ -55,21 +75,24 @@
     <a href="index.html">Home | الرئيسية</a>
     <a href="about.html">About | من نحن</a>
     <a href="contact.html">Contact | اتصل بنا</a>
-    <a href="#">Privacy | الخصوصية</a>
-    <a href="#">Terms | الشروط</a>
   </div>
 </nav>
 
 <h1>Contact Us | اتصل بنا</h1>
 
-<div class="content">
-  <p>
-    For inquiries, orders, or support, please contact us at: <br>
-    Email: <strong>support@ajlib.store</strong>
-    <br><br>
-    لأي استفسارات أو طلبات أو دعم، يرجى التواصل معنا على البريد الإلكتروني التالي: <br>
-    <strong>support@ajlib.store</strong>
-  </p>
+<div class="form-container">
+  <form>
+    <label for="name">Name | الاسم</label>
+    <input type="text" id="name" name="name" required>
+
+    <label for="email">Email | البريد الإلكتروني</label>
+    <input type="email" id="email" name="email" required>
+
+    <label for="message">Message | الرسالة</label>
+    <textarea id="message" name="message" rows="5" required></textarea>
+
+    <button type="submit">Send | إرسال</button>
+  </form>
 </div>
 
 <footer>
