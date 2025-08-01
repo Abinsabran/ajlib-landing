@@ -1,41 +1,82 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <title>تواصل معنا - أجلب</title>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <title>Contact | اتصل بنا</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Tahoma', sans-serif;
+      background-color: #f1fcf9;
+    }
+    nav {
+      background-color: #005e4f;
+      color: white;
+      padding: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    nav a {
+      color: white;
+      margin: 0 10px;
+      text-decoration: none;
+    }
+    h1 {
+      text-align: center;
+      color: #005e4f;
+      margin-top: 30px;
+    }
+    .content {
+      padding: 30px;
+      font-size: 18px;
+      line-height: 1.7;
+      max-width: 900px;
+      margin: auto;
+      background-color: #ffffff;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);
+    }
+    footer {
+      text-align: center;
+      padding: 20px;
+      background: #005e4f;
+      color: white;
+      margin-top: 40px;
+    }
+  </style>
 </head>
 <body>
-    <header>
-        <h1>تواصل معنا</h1>
-        <nav>
-            <a href="index.html">الرئيسية</a>
-            <a href="about.html">من نحن</a>
-            <a href="contact.html">تواصل معنا</a>
-            <a href="index-en.html">English</a>
-        </nav>
-    </header>
 
-    <main>
-        <section class="contact-form">
-            <h2>نحن هنا لمساعدتك!</h2>
-            <form action="mailto:support@ajlib.com" method="post" enctype="text/plain">
-                <label for="name">الاسم:</label><br>
-                <input type="text" id="name" name="name" required><br><br>
+<nav>
+  <div>Ajlib Store | متجر أجلب</div>
+  <div>
+    <a href="index.html">Home | الرئيسية</a>
+    <a href="about.html">About | من نحن</a>
+    <a href="contact.html">Contact | اتصل بنا</a>
+    <a href="#">Privacy | الخصوصية</a>
+    <a href="#">Terms | الشروط</a>
+  </div>
+</nav>
 
-                <label for="email">البريد الإلكتروني:</label><br>
-                <input type="email" id="email" name="email" required><br><br>
+<h1>Contact Us | اتصل بنا</h1>
 
-                <label for="message">رسالتك:</label><br>
-                <textarea id="message" name="message" rows="5" required></textarea><br><br>
+<div class="content">
+  <p>
+    For inquiries, orders, or support, please contact us:
+    <br>
+    عبر البريد الإلكتروني: <strong>support@ajlib.store</strong>
+    <br><br>
+    لأي استفسارات أو طلبات أو دعم، يرجى التواصل معنا:
+    <br>
+    Email: <strong>support@ajlib.store</strong>
+  </p>
+</div>
 
-                <button type="submit">إرسال</button>
-            </form>
-        </section>
-    </main>
+<footer>
+  جميع الحقوق محفوظة &copy; Ajlib 2025 | All rights reserved
+</footer>
 
-    <footer>
-        جميع الحقوق محفوظة © أجلب 2025
-    </footer>
 </body>
 </html>
