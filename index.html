@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ajlib - متجر الملابس الداخلية الفاخرة للرجال</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f8f9fa;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+        
+        /* Header */
+        header {
+            background: #fff;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 0;
+        }
+        
+        .logo {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #2563eb;
+        }
+        
+        .nav-links {
+            display: flex;
+            list-style: none;
+            gap: 2rem;
+        }
+        
+        .nav-links a {
+            text-decoration: none;
+            color: #333;
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+        
+        .nav-links a:hover {
+            color: #2563eb;
+        }
+        
+        /* Hero Section */
+        .hero {
+            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+            color: white;
+            padding: 4rem 0;
+            text-align: center;
+        }
+        
+        .hero h1 {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+        
+        .hero p {
+            font-size: 1.2rem;
+            margin-bottom: 2rem;
+            opacity: 0.9;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 12px 30px;
+            background: #fff;
+            color: #2563eb;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        }
+        
+        /* Products Section */
+        .products {
+            padding: 4rem 0;
+        }
+        
+        .section-title {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 3rem;
+            color: #333;
+        }
+        
+        .products-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+        
+        .product-card {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        
+        .product-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        }
+        
+        .product-image {
+            width: 100%;
+            height: 250px;
+            object-fit: cover;
+        }
+        
+        .product-info {
+            padding: 1.5rem;
+        }
+        
+        .product-name {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: #333;
+        }
+        
+        .product-price {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #2563eb;
+            margin-bottom: 1rem;
+        }
+        
+        .product-features {
+            list-style: none;
+            margin-bottom: 1.5rem;
+        }
+        
+        .product-features li {
+            padding: 0.3rem 0;
+            color: #666;
+            font-size: 0.9rem;
+        }
+        
+        .product-features li:before {
+            content: "✓";
+            color: #10b981;
+            font-weight: bold;
+            margin-left: 0.5rem;
+        }
+        
+        .size-selector {
+            margin-bottom: 1rem;
+        }
+        
+        .size-selector label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+        
+        .size-options {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+        
+        .size-btn {
+            padding: 8px 16px;
+            border: 2px solid #e5e7eb;
+            background: white;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .size-btn:hover,
+        .size-btn.active {
+            border-color: #2563eb;
+            background: #2563eb;
+            color: white;
+        }
+        
+        .quantity-selector {
+            margin-bottom: 1rem;
+        }
+        
+        .quantity-controls {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .quantity-btn {
+            width: 40px;
+            height: 40px;
+            border: 2px solid #e5e7eb;
+            background: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+        
+        .quantity-display {
+            font-size: 1.2rem;
+            font-weight: bold;
+            min-width: 40px;
+            text-align: center;
+        }
+        
+        .add-to-cart {
+            width: 100%;
+            padding: 12px;
+            background: #2563eb;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        .add-to-cart:hover {
+            background: #1d4ed8;
+        }
+        
+        /* Features Section */
+        .features {
+            background: white;
+            padding: 4rem 0;
+        }
+        
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+        }
+        
+        .feature {
+            text-align: center;
+            padding: 2rem;
+        }
+        
+        .feature-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+        
+        .feature h3 {
+            font-size: 1.3rem;
+            margin-bottom: 1rem;
+            color: #333;
+        }
+        
+        .feature p {
+            color: #666;
+        }
+        
+        /* Footer */
+        footer {
+            background: #1f2937;
+            color: white;
+            padding: 3rem 0 1rem;
+        }
+        
+        .footer-content {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+        
+        .footer-section h3 {
+            margin-bottom: 1rem;
+            color: #2563eb;
+        }
+        
+        .footer-section ul {
+            list-style: none;
+        }
+        
+        .footer-section ul li {
+            padding: 0.3rem 0;
+        }
+        
+        .footer-section ul li a {
+            color: #d1d5db;
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+        
+        .footer-section ul li a:hover {
+            color: white;
+        }
+        
+        .footer-bottom {
+            text-align: center;
+            padding-top: 2rem;
+            border-top: 1px solid #374151;
+            color: #9ca3af;
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 2rem;
+            }
+            
+            .nav-links {
+                display: none;
+            }
+            
+            .products-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header>
+        <nav class="container">
+            <div class="logo">Ajlib</div>
+            <ul class="nav-links">
+                <li><a href="#home">الرئيسية</a></li>
+                <li><a href="#products">المنتجات</a></li>
+                <li><a href="#about">من نحن</a></li>
+                <li><a href="#contact">اتصل بنا</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero" id="home">
+        <div class="container">
+            <h1>مرحباً بك في متجر Ajlib</h1>
+            <p>أفضل الملابس الداخلية الفاخرة للرجال بجودة عالية وأسعار مناسبة</p>
+            <a href="#products" class="btn">تسوق الآن</a>
+        </div>
+    </section>
+
+    <!-- Products Section -->
+    <section class="products" id="products">
+        <div class="container">
+            <h2 class="section-title">منتجاتنا المميزة</h2>
+            <div class="products-grid">
+                <!-- Product 1 -->
+                <div class="product-card">
+                    <img src="/images/products/boxer-black.jpg" alt="بوكسر أسود" class="product-image">
+                    <div class="product-info">
+                        <h3 class="product-name">بوكسر كلاسيكي - أسود</h3>
+                        <div class="product-price">18.5 درهم</div>
+                        <ul class="product-features">
+                            <li>قطن طبيعي 100%</li>
+                            <li>مقاوم للانكماش</li>
+                            <li>خياطة عالية الجودة</li>
+                        </ul>
+                        
+                        <div class="size-selector">
+                            <label>المقاس:</label>
+                            <div class="size-options">
+                                <button class="size-btn" onclick="selectSize(this, 'M')">M</button>
+                                <button class="size-btn active" onclick="selectSize(this, 'L')">L</button>
+                                <button class="size-btn" onclick="selectSize(this, 'XL')">XL</button>
+                                <button class="size-btn" onclick="selectSize(this, 'XXL')">XXL</button>
+                            </div>
+                        </div>
+                        
+                        <div class="quantity-selector">
+                            <label>الكمية:</label>
+                            <div class="quantity-controls">
+                                <button class="quantity-btn" onclick="changeQuantity(this, -1)">-</button>
+                                <span class="quantity-display">1</span>
+                                <button class="quantity-btn" onclick="changeQuantity(this, 1)">+</button>
+                            </div>
+                        </div>
+                        
+                        <button class="add-to-cart" onclick="addToCart('بوكسر أسود', this)">أضف إلى السلة</button>
+                    </div>
+                </div>
+
+                <!-- Product 2 -->
+                <div class="product-card">
+                    <img src="/images/products/boxer-navy.jpg" alt="بوكسر أزرق غامق" class="product-image">
+                    <div class="product-info">
+                        <h3 class="product-name">بوكسر كلاسيكي - أزرق غامق</h3>
+                        <div class="product-price">18.5 درهم</div>
+                        <ul class="product-features">
+                            <li>قطن طبيعي 100%</li>
+                            <li>مقاوم للانكماش</li>
+                            <li>خياطة عالية الجودة</li>
+                        </ul>
+                        
+                        <div class="size-selector">
+                            <label>المقاس:</label>
+                            <div class="size-options">
+                                <button class="size-btn" onclick="selectSize(this, 'M')">M</button>
+                                <button class="size-btn active" onclick="selectSize(this, 'L')">L</button>
+                                <button class="size-btn" onclick="selectSize(this, 'XL')">XL</button>
+                                <button class="size-btn" onclick="selectSize(this, 'XXL')">XXL</button>
+                            </div>
+                        </div>
+                        
+                        <div class="quantity-selector">
+                            <label>الكمية:</label>
+                            <div class="quantity-controls">
+                                <button class="quantity-btn" onclick="changeQuantity(this, -1)">-</button>
+                                <span class="quantity-display">1</span>
+                                <button class="quantity-btn" onclick="changeQuantity(this, 1)">+</button>
+                            </div>
+                        </div>
+                        
+                        <button class="add-to-cart" onclick="addToCart('بوكسر أزرق غامق', this)">أضف إلى السلة</button>
+                    </div>
+                </div>
+
+                <!-- Product 3 -->
+                <div class="product-card">
+                    <img src="/images/products/boxer-white.jpg" alt="بوكسر أبيض" class="product-image">
+                    <div class="product-info">
+                        <h3 class="product-name">بوكسر كلاسيكي - أبيض</h3>
+                        <div class="product-price">18.5 درهم</div>
+                        <ul class="product-features">
+                            <li>قطن طبيعي 100%</li>
+                            <li>مقاوم للانكماش</li>
+                            <li>خياطة عالية الجودة</li>
+                        </ul>
+                        
+                        <div class="size-selector">
+                            <label>المقاس:</label>
+                            <div class="size-options">
+                                <button class="size-btn" onclick="selectSize(this, 'M')">M</button>
+                                <button class="size-btn active" onclick="selectSize(this, 'L')">L</button>
+                                <button class="size-btn" onclick="selectSize(this, 'XL')">XL</button>
+                                <button class="size-btn" onclick="selectSize(this, 'XXL')">XXL</button>
+                            </div>
+                        </div>
+                        
+                        <div class="quantity-selector">
+                            <label>الكمية:</label>
+                            <div class="quantity-controls">
+                                <button class="quantity-btn" onclick="changeQuantity(this, -1)">-</button>
+                                <span class="quantity-display">1</span>
+                                <button class="quantity-btn" onclick="changeQuantity(this, 1)">+</button>
+                            </div>
+                        </div>
+                        
+                        <button class="add-to-cart" onclick="addToCart('بوكسر أبيض', this)">أضف إلى السلة</button>
+                    </div>
+                </div>
+
+                <!-- Product 4 -->
+                <div class="product-card">
+                    <img src="/images/products/boxer-gray.jpg" alt="بوكسر رصاصي" class="product-image">
+                    <div class="product-info">
+                        <h3 class="product-name">بوكسر كلاسيكي - رصاصي</h3>
+                        <div class="product-price">18.5 درهم</div>
+                        <ul class="product-features">
+                            <li>قطن طبيعي 100%</li>
+                            <li>مقاوم للانكماش</li>
+                            <li>خياطة عالية الجودة</li>
+                        </ul>
+                        
+                        <div class="size-selector">
+                            <label>المقاس:</label>
+                            <div class="size-options">
+                                <button class="size-btn" onclick="selectSize(this, 'M')">M</button>
+                                <button class="size-btn active" onclick="selectSize(this, 'L')">L</button>
+                                <button class="size-btn" onclick="selectSize(this, 'XL')">XL</button>
+                                <button class="size-btn" onclick="selectSize(this, 'XXL')">XXL</button>
+                            </div>
+                        </div>
+                        
+                        <div class="quantity-selector">
+                            <label>الكمية:</label>
+                            <div class="quantity-controls">
+                                <button class="quantity-btn" onclick="changeQuantity(this, -1)">-</button>
+                                <span class="quantity-display">1</span>
+                                <button class="quantity-btn" onclick="changeQuantity(this, 1)">+</button>
+                            </div>
+                        </div>
+                        
+                        <button class="add-to-cart" onclick="addToCart('بوكسر رصاصي', this)">أضف إلى السلة</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="features">
+        <div class="container">
+            <h2 class="section-title">لماذا تختار Ajlib؟</h2>
+            <div class="features-grid">
+                <div class="feature">
+                    <div class="feature-icon">🚚</div>
+                    <h3>شحن مجاني</h3>
+                    <p>شحن مجاني لجميع الطلبات داخل الإمارات</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">🛡️</div>
+                    <h3>جودة مضمونة</h3>
+                    <p>منتجات عالية الجودة مع ضمان الاستبدال</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">💳</div>
+                    <h3>دفع آمن</h3>
+                    <p>طرق دفع متعددة وآمنة</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">📞</div>
+                    <h3>دعم 24/7</h3>
+                    <p>خدمة عملاء متاحة على مدار الساعة</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h3>Ajlib</h3>
+                    <p>متجر الملابس الداخلية الفاخرة للرجال. نقدم أفضل المنتجات بجودة عالية وأسعار مناسبة.</p>
+                </div>
+                <div class="footer-section">
+                    <h3>روابط سريعة</h3>
+                    <ul>
+                        <li><a href="#home">الرئيسية</a></li>
+                        <li><a href="#products">المنتجات</a></li>
+                        <li><a href="#about">من نحن</a></li>
+                        <li><a href="#contact">اتصل بنا</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h3>خدمة العملاء</h3>
+                    <ul>
+                        <li><a href="#">سياسة الاستبدال</a></li>
+                        <li><a href="#">الشحن والتوصيل</a></li>
+                        <li><a href="#">الأسئلة الشائعة</a></li>
+                        <li><a href="#">اتصل بنا</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h3>تواصل معنا</h3>
+                    <ul>
+                        <li>📧 support@ajlib.store</li>
+                        <li>📱 +971509100901</li>
+                        <li>📍 دبي، الإمارات العربية المتحدة</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2024 Ajlib. جميع الحقوق محفوظة.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Size selection
+        function selectSize(button, size) {
+            const sizeButtons = button.parentElement.querySelectorAll('.size-btn');
+            sizeButtons.forEach(btn => btn.classList.remove('active'));
+            button.classList.add('active');
+        }
+
+        // Quantity controls
+        function changeQuantity(button, change) {
+            const quantityDisplay = button.parentElement.querySelector('.quantity-display');
+            let currentQuantity = parseInt(quantityDisplay.textContent);
+            let newQuantity = currentQuantity + change;
+            
+            if (newQuantity >= 1 && newQuantity <= 10) {
+                quantityDisplay.textContent = newQuantity;
+                
+                // Update price display
+                const productCard = button.closest('.product-card');
+                const priceElement = productCard.querySelector('.product-price');
+                const basePrice = 18.5;
+                const totalPrice = (basePrice * newQuantity).toFixed(1);
+                priceElement.textContent = totalPrice + ' درهم';
+            }
+        }
+
+        // Add to cart
+        function addToCart(productName, button) {
+            const productCard = button.closest('.product-card');
+            const selectedSize = productCard.querySelector('.size-btn.active').textContent;
+            const quantity = productCard.querySelector('.quantity-display').textContent;
+            
+            alert(`تم إضافة ${productName} (مقاس ${selectedSize}) - الكمية: ${quantity} إلى السلة!`);
+        }
+
+        // Smooth scrolling
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+    </script>
+</body>
+</html>
+
