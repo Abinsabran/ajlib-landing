@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>سلة المشتريات | Ajlib</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, sans-serif;
+      background: #f9f9f9;
+      padding: 20px;
+      direction: rtl;
+    }
+
+    h1 {
+      color: #2563eb;
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 30px;
+    }
+
+    th, td {
+      padding: 12px;
+      text-align: center;
+      border-bottom: 1px solid #ccc;
+    }
+
+    th {
+      background: #2563eb;
+      color: white;
+    }
+
+    .total {
+      text-align: left;
+      font-weight: bold;
+      font-size: 1.2rem;
+      margin-top: 20px;
+    }
+
+    .remove-btn {
+      background: #ef4444;
+      color: white;
+      padding: 6px 12px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    .remove-btn:hover {
+      background: #dc2626;
+    }
+
+    .back-link {
+      display: inline-block;
+      margin-top: 30px;
+      text-decoration: none;
+      color: #2563eb;
+      font-weight: bold;
+    }
+
+    .back-link:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>🛒 سلة المشتريات</h1>
+
+  <table id="cartTable">
+    <thead>
+      <tr>
+        <th>المنتج</th>
+        <th>المقاس</th>
+        <th>الكمية</th>
+        <th>السعر</th>
+        <th>الحذف</th>
+      </tr>
+    </thead>
+    <tbody>
+      <!-- سيتم إدراج العناصر هنا تلقائيًا -->
+    </tbody>
+  </table>
+
+  <div class="total" id="totalPrice">الإجمالي: 0 درهم</div>
+
+  <a href="index.html" class="back-link">⬅ العودة للمتجر</a>
+
+  <script>
+    function loadCart() {
+      const cartTable = document.querySelector("#cartTable tbody");
+      const totalDiv = document.getElementById("totalPrice");
+      const cartItems = JSON.parse(localStorage.getItem("cartItems")) || [];
+
+      cartTable.innerHTML = "";
+      let total = 0;
+
+      cartItems.forEach((item, index) => {
+        const row = document.createElement("tr");
+
+        row.innerHTML = `
+          <td>${item.name}</td>
+          <td>${item.size}</td>
+          <td>${item.quantity}</td>
+          <td>${(item.quantity * item.price).toFixed(2)} درهم</td>
+          <td><button class="remove-btn" onclick="removeItem(${index})">حذف</button></td>
+        `;
+
+        cartTable.appendChild(row);
+        total += item.quantity * item.price;
+      });
+
+      totalDiv.textContent = "الإجمالي: " + total.toFixed(2) + " درهم";
+    }
+
+    function removeItem(index) {
+      const cartItems = JSON.parse(localStorage.getItem("cartItems")) || [];
+      cartItems.splice(index, 1);
+      localStorage.setItem("cartItems", JSON.stringify(cartItems));
+      loadCart();
+    }
+
+    loadCart();
+  </script>
+</body>
+</html>
