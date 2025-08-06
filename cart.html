@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <title>سلة المشتريات | Ajlib</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="assets/style.css"> <!-- إذا كنت تريد دمج CSS الخارجي -->
+
   <style>
     body {
       font-family: 'Segoe UI', Tahoma, sans-serif;
@@ -22,6 +24,7 @@
       width: 100%;
       border-collapse: collapse;
       margin-bottom: 30px;
+      background: white;
     }
 
     th, td {
@@ -55,6 +58,22 @@
       background: #dc2626;
     }
 
+    .checkout-btn {
+      background-color: #10b981;
+      color: white;
+      padding: 14px 30px;
+      border: none;
+      border-radius: 8px;
+      font-size: 1.1rem;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+
+    .checkout-btn:hover {
+      background-color: #059669;
+    }
+
     .back-link {
       display: inline-block;
       margin-top: 30px;
@@ -83,16 +102,19 @@
       </tr>
     </thead>
     <tbody>
-      <!-- سيتم إدراج العناصر هنا تلقائيًا -->
+      <!-- سيتم إدراج العناصر هنا -->
     </tbody>
   </table>
 
   <div class="total" id="totalPrice">الإجمالي: 0 درهم</div>
-  <div style="text-align: center; margin-top: 20px;">
-  <button id="checkoutBtn" class="checkout-btn">إتمام الطلب</button>
-</div>
 
-  <a href="index.html" class="back-link">⬅ العودة للمتجر</a>
+  <div style="text-align: center; margin-top: 20px;">
+    <button id="checkoutBtn" class="checkout-btn">إتمام الطلب</button>
+  </div>
+
+  <div style="text-align: center;">
+    <a href="index.html" class="back-link">⬅ العودة للمتجر</a>
+  </div>
 
   <script>
     function loadCart() {
@@ -127,6 +149,18 @@
       localStorage.setItem("cartItems", JSON.stringify(cartItems));
       loadCart();
     }
+
+    document.getElementById("checkoutBtn").addEventListener("click", function () {
+      const cartItems = JSON.parse(localStorage.getItem("cartItems")) || [];
+
+      if (cartItems.length === 0) {
+        alert("سلة المشتريات فارغة.");
+      } else {
+        alert("✅ تم إرسال الطلب بنجاح! سيتم التواصل معك قريبًا.");
+        localStorage.removeItem("cartItems");
+        loadCart();
+      }
+    });
 
     loadCart();
   </script>
