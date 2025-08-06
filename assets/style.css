@@ -1,1 +1,10 @@
+.cart-link {
+    font-size: 1.1rem;
+    color: #2563eb;
+    font-weight: 600;
+}
+
+.cart-link:hover {
+    color: #1d4ed8;
+}
 
