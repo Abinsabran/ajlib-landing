@@ -345,18 +345,25 @@
 <body>
     <!-- Header -->
     <header>
-        <nav class="container">
-            <div class="logo">Ajlib</div>
-            <ul class="nav-links">
-                <li><a href="#home">الرئيسية</a></li>
-                <li><a href="#products">المنتجات</a></li>
-                <li><a href="#about">من نحن</a></li>
-                <li><a href="#contact">اتصل بنا</a></li>
-                <li><a href="cart.html" class="cart-link">🛒 السلة</a></li>
-</ul>
-            </ul>
-        </nav>
-    </header>
+  <nav class="container site-nav">
+    <div class="logo">Ajlib</div>
+
+    <!-- زر المنيو للجوال -->
+    <button class="menu-toggle" aria-label="فتح القائمة" aria-expanded="false">☰</button>
+
+    <!-- قائمة الروابط -->
+    <ul class="nav-links">
+      <li><a href="#home">الرئيسية</a></li>
+      <li><a href="#products">المنتجات</a></li>
+      <li><a href="#about">من نحن</a></li>
+      <li><a href="#contact">اتصل بنا</a></li>
+      <li><a href="cart.html" class="cart-link">🛒 السلة</a></li>
+    </ul>
+  </nav>
+
+  <!-- طبقة تعتيم تُستخدم عند فتح القائمة على الجوال -->
+  <div class="nav-overlay" hidden></div>
+</header>
 
     <!-- Hero Section -->
     <section class="hero" id="home">
