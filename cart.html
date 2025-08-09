@@ -1,10 +1,11 @@
-<!DOCTYPE html>
+<!DOCTYPE html> 
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
   <title>سلة المشتريات | Ajlib</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="stylesheet" href="assets/style.css"> <!-- إذا كنت تريد دمج CSS الخارجي -->
+  <!-- لو عندك ستايلات عامة هنا بتشتغل -->
+  <link rel="stylesheet" href="assets/style.css">
 
   <style>
     body {
@@ -14,82 +15,125 @@
       direction: rtl;
     }
 
+    .topbar{
+      display:flex; align-items:center; justify-content:space-between;
+      margin-bottom: 16px;
+    }
+    .topbar a{
+      color:#2563eb; font-weight:600; text-decoration:none;
+    }
+    .topbar a:hover{ text-decoration:underline; }
+
     h1 {
       color: #2563eb;
       text-align: center;
-      margin-bottom: 30px;
+      margin: 10px 0 6px;
+    }
+    .cart-subtitle{
+      text-align:center; color:#6b7280; margin-bottom:22px; font-size:.95rem;
     }
 
     table {
       width: 100%;
       border-collapse: collapse;
-      margin-bottom: 30px;
+      margin-bottom: 20px;
       background: white;
     }
 
     th, td {
       padding: 12px;
       text-align: center;
-      border-bottom: 1px solid #ccc;
+      border-bottom: 1px solid #eee;
     }
 
     th {
       background: #2563eb;
       color: white;
+      position: sticky; top:0;
     }
 
-    .total {
-      text-align: left;
-      font-weight: bold;
-      font-size: 1.2rem;
-      margin-top: 20px;
+    .qty-box{
+      display:inline-flex; align-items:center; gap:8px;
+      border:1px solid #e5e7eb; border-radius:8px; padding:4px 8px;
+      background:#fafafa;
     }
+    .qty-btn{
+      width:28px; height:28px; border:1px solid #e5e7eb; background:white; border-radius:6px;
+      cursor:pointer; font-weight:700; font-size:16px;
+    }
+    .qty-val{ min-width:28px; font-weight:700; }
 
-    .remove-btn {
+    .price-cell{ white-space:nowrap; }
+
+    .remove-btn, .clear-btn{
       background: #ef4444;
       color: white;
-      padding: 6px 12px;
+      padding: 8px 12px;
       border: none;
-      border-radius: 5px;
+      border-radius: 8px;
       cursor: pointer;
+      font-weight:600;
     }
+    .remove-btn:hover, .clear-btn:hover { background: #dc2626; }
 
-    .remove-btn:hover {
-      background: #dc2626;
+    .total-row{
+      display:flex; align-items:center; justify-content:space-between;
+      gap: 12px; flex-wrap:wrap; margin-top: 10px;
+    }
+    .total{
+      font-weight: bold; font-size: 1.15rem;
     }
 
     .checkout-btn {
       background-color: #10b981;
       color: white;
-      padding: 14px 30px;
+      padding: 12px 22px;
       border: none;
-      border-radius: 8px;
-      font-size: 1.1rem;
-      font-weight: bold;
+      border-radius: 10px;
+      font-size: 1rem;
+      font-weight: 700;
       cursor: pointer;
-      transition: background 0.3s;
+      transition: background 0.25s;
     }
-
-    .checkout-btn:hover {
-      background-color: #059669;
-    }
+    .checkout-btn:hover { background-color: #059669; }
 
     .back-link {
       display: inline-block;
-      margin-top: 30px;
+      margin-top: 20px;
       text-decoration: none;
       color: #2563eb;
       font-weight: bold;
     }
+    .back-link:hover { text-decoration: underline; }
 
-    .back-link:hover {
-      text-decoration: underline;
+    /* شارة عدّاد السلة بجانب العنوان */
+    .badge{
+      display:inline-flex; align-items:center; justify-content:center;
+      min-width:22px; height:22px; padding:0 6px; margin-inline-start:6px;
+      border-radius:999px; background:#ef4444; color:#fff; font-size:12px; font-weight:800;
+      vertical-align:middle;
+    }
+    .badge.is-zero{ display:none; }
+
+    /* موبايل */
+    @media (max-width: 768px){
+      th:nth-child(1), td:nth-child(1){ text-align:right; }
+      .total-row{ flex-direction:column; align-items:stretch; }
+      .checkout-btn, .clear-btn{ width:100%; }
     }
   </style>
 </head>
 <body>
 
-  <h1>🛒 سلة المشتريات</h1>
+  <div class="topbar">
+    <a href="index.html">⬅ العودة للمتجر</a>
+    <a href="cart.html">🛒 السلة</a>
+  </div>
+
+  <h1>🛒 سلة المشتريات
+    <span class="badge is-zero" id="cartCount">0</span>
+  </h1>
+  <div class="cart-subtitle">يمكنك تعديل الكمية أو حذف العناصر قبل إتمام الطلب</div>
 
   <table id="cartTable">
     <thead>
@@ -97,71 +141,156 @@
         <th>المنتج</th>
         <th>المقاس</th>
         <th>الكمية</th>
-        <th>السعر</th>
+        <th>سعر القطعة</th>
+        <th>الإجمالي</th>
         <th>الحذف</th>
       </tr>
     </thead>
     <tbody>
-      <!-- سيتم إدراج العناصر هنا -->
+      <!-- يتم إدراج الصفوف هنا -->
     </tbody>
   </table>
 
-  <div class="total" id="totalPrice">الإجمالي: 0 درهم</div>
-
-  <div style="text-align: center; margin-top: 20px;">
-    <button id="checkoutBtn" class="checkout-btn">إتمام الطلب</button>
+  <div class="total-row">
+    <div class="total" id="totalPrice">الإجمالي: 0.00 درهم</div>
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+      <button id="clearCartBtn" class="clear-btn" type="button">إفراغ السلة</button>
+      <button id="checkoutBtn" class="checkout-btn" type="button">إتمام الطلب</button>
+    </div>
   </div>
 
   <div style="text-align: center;">
-    <a href="index.html" class="back-link">⬅ العودة للمتجر</a>
+    <a href="index.html" class="back-link">⬅ متابعة التسوق</a>
   </div>
 
   <script>
-    function loadCart() {
-      const cartTable = document.querySelector("#cartTable tbody");
-      const totalDiv = document.getElementById("totalPrice");
-      const cartItems = JSON.parse(localStorage.getItem("cartItems")) || [];
+    // ===== Utilities: storage =====
+    function getCartItems(){
+      try { return JSON.parse(localStorage.getItem("cartItems")) || []; }
+      catch { return []; }
+    }
+    function setCartItems(items){
+      localStorage.setItem("cartItems", JSON.stringify(items));
+      updateCartBadge();
+    }
+    function getCartCount(){
+      return getCartItems().reduce((sum, it) => sum + (parseInt(it.quantity)||0), 0);
+    }
 
-      cartTable.innerHTML = "";
-      let total = 0;
+    // ===== Badge update =====
+    function updateCartBadge(){
+      const badge = document.getElementById('cartCount');
+      if(!badge) return;
+      const count = getCartCount();
+      badge.textContent = count;
+      if(count <= 0) badge.classList.add('is-zero'); else badge.classList.remove('is-zero');
+    }
 
-      cartItems.forEach((item, index) => {
-        const row = document.createElement("tr");
+    // ===== Render table =====
+    function formatAED(v){ return Number(v).toFixed(2) + ' درهم'; }
 
-        row.innerHTML = `
+    function renderRow(item, index){
+      const subtotal = (item.price * item.quantity);
+      return `
+        <tr>
           <td>${item.name}</td>
           <td>${item.size}</td>
-          <td>${item.quantity}</td>
-          <td>${(item.quantity * item.price).toFixed(2)} درهم</td>
-          <td><button class="remove-btn" onclick="removeItem(${index})">حذف</button></td>
-        `;
-
-        cartTable.appendChild(row);
-        total += item.quantity * item.price;
-      });
-
-      totalDiv.textContent = "الإجمالي: " + total.toFixed(2) + " درهم";
+          <td>
+            <div class="qty-box">
+              <button class="qty-btn" data-action="dec" data-index="${index}">-</button>
+              <span class="qty-val" id="qty-${index}">${item.quantity}</span>
+              <button class="qty-btn" data-action="inc" data-index="${index}">+</button>
+            </div>
+          </td>
+          <td class="price-cell">${formatAED(item.price)}</td>
+          <td class="price-cell" id="subtotal-${index}">${formatAED(subtotal)}</td>
+          <td><button class="remove-btn" data-action="remove" data-index="${index}">حذف</button></td>
+        </tr>
+      `;
     }
 
-    function removeItem(index) {
-      const cartItems = JSON.parse(localStorage.getItem("cartItems")) || [];
-      cartItems.splice(index, 1);
-      localStorage.setItem("cartItems", JSON.stringify(cartItems));
-      loadCart();
+    function calcTotal(items){
+      return items.reduce((sum, it) => sum + (it.price * it.quantity), 0);
     }
 
-    document.getElementById("checkoutBtn").addEventListener("click", function () {
-      const cartItems = JSON.parse(localStorage.getItem("cartItems")) || [];
+    function loadCart(){
+      const tbody = document.querySelector("#cartTable tbody");
+      const totalDiv = document.getElementById("totalPrice");
+      const items = getCartItems();
 
-      if (cartItems.length === 0) {
-        alert("سلة المشتريات فارغة.");
-      } else {
-        alert("✅ تم إرسال الطلب بنجاح! سيتم التواصل معك قريبًا.");
-        localStorage.removeItem("cartItems");
+      if(!tbody || !totalDiv) return;
+
+      tbody.innerHTML = items.map(renderRow).join("");
+      totalDiv.textContent = "الإجمالي: " + formatAED(calcTotal(items));
+      updateCartBadge();
+    }
+
+    // ===== Events: quantity, remove, clear, checkout =====
+    document.addEventListener('click', function(e){
+      const btn = e.target;
+      const action = btn.getAttribute('data-action');
+      if(!action) return;
+
+      const index = parseInt(btn.getAttribute('data-index'));
+      let items = getCartItems();
+
+      if(Number.isInteger(index) && items[index]){
+        if(action === 'inc'){
+          items[index].quantity = Math.min(1000, (parseInt(items[index].quantity)||1) + 1);
+          setCartItems(items);
+          updateRow(index, items[index]);
+        }
+        else if(action === 'dec'){
+          items[index].quantity = Math.max(1, (parseInt(items[index].quantity)||1) - 1);
+          setCartItems(items);
+          updateRow(index, items[index]);
+        }
+        else if(action === 'remove'){
+          items.splice(index, 1);
+          setCartItems(items);
+          loadCart();
+        }
+      }
+    });
+
+    function updateRow(index, item){
+      // Update Qty UI
+      const qtyEl = document.getElementById('qty-' + index);
+      if(qtyEl) qtyEl.textContent = item.quantity;
+
+      // Update subtotal cell
+      const subEl = document.getElementById('subtotal-' + index);
+      if(subEl) subEl.textContent = (item.price * item.quantity).toFixed(2) + ' درهم';
+
+      // Update total
+      const totalDiv = document.getElementById('totalPrice');
+      totalDiv.textContent = "الإجمالي: " + (calcTotal(getCartItems())).toFixed(2) + " درهم";
+    }
+
+    // Clear cart
+    document.getElementById('clearCartBtn').addEventListener('click', function(){
+      if(confirm('متأكد من إفراغ السلة بالكامل؟')){
+        setCartItems([]);
         loadCart();
       }
     });
 
+    // Checkout (نسخة بسيطة الآن – سنربطها لاحقًا بـ Checkout.com)
+    document.getElementById('checkoutBtn').addEventListener('click', function(){
+      const items = getCartItems();
+      if(items.length === 0){ alert("سلة المشتريات فارغة."); return; }
+
+      // يمكنك هنا إرسال الطلب لسيرفر/بوابة الدفع
+      alert("✅ تم إرسال الطلب بنجاح! سيتم التواصل معك قريبًا.");
+
+      setCartItems([]);
+      loadCart();
+    });
+
+    // Sync بين التبويبات
+    window.addEventListener('storage', (e) => { if(e.key === 'cartItems') loadCart(); });
+
+    // Init
     loadCart();
   </script>
 </body>
