@@ -1,10 +1,58 @@
-.cart-link {
-    font-size: 1.1rem;
-    color: #2563eb;
-    font-weight: 600;
+/* 🌟 قائمة الجوال */
+.menu-toggle {
+    display: none;
+    font-size: 1.8rem;
+    background: none;
+    border: none;
+    cursor: pointer;
 }
 
-.cart-link:hover {
-    color: #1d4ed8;
+.nav-links {
+    display: flex;
+    gap: 2rem;
 }
 
+.nav-overlay {
+    display: none;
+}
+
+@media (max-width: 768px) {
+    .menu-toggle {
+        display: block;
+        color: #2563eb;
+    }
+
+    .nav-links {
+        position: fixed;
+        top: 0;
+        right: -250px;
+        height: 100%;
+        width: 250px;
+        background: #fff;
+        flex-direction: column;
+        padding: 2rem 1rem;
+        gap: 1.5rem;
+        box-shadow: -2px 0 10px rgba(0,0,0,0.2);
+        transition: right 0.3s ease-in-out;
+        z-index: 200;
+    }
+
+    .nav-links.active {
+        right: 0;
+    }
+
+    .nav-overlay {
+        display: block;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.5);
+        z-index: 150;
+    }
+
+    .nav-overlay.hidden {
+        display: none;
+    }
+}
