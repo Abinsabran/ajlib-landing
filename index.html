@@ -63,6 +63,25 @@
         .nav-links a:hover {
             color: #2563eb;
         }
+
+        /* قائمة الجوال الاحترافية */
+        .site-nav { position: relative; }
+
+        /* زر المنيو: مخفي على الديسكتوب ويظهر على الجوال */
+        .menu-toggle {
+            display: none;
+            background: #2563eb;
+            color: #fff;
+            border: 0;
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-size: 20px;
+            cursor: pointer;
+        }
+
+        /* رابط السلة */
+        .cart-link { font-weight: 600; color: #2563eb; }
+        .cart-link:hover { color: #1d4ed8; }
         
         /* Hero Section */
         .hero {
@@ -326,18 +345,63 @@
             color: #9ca3af;
         }
         
-        /* Responsive */
+        /* ===== Responsive ===== */
         @media (max-width: 768px) {
             .hero h1 {
                 font-size: 2rem;
             }
-            
+
+            /* زر المنيو يظهر على الجوال */
+            .menu-toggle { display: inline-block; }
+
+            /* نحول القائمة لدرج جانبي (سلايد من اليمين) */
             .nav-links {
-                display: none;
+                position: fixed;
+                top: 0;
+                right: 0;                 /* RTL */
+                width: 85vw;
+                max-width: 360px;
+                height: 100vh;
+                background: #fff;
+                box-shadow: -12px 0 30px rgba(0,0,0,0.1);
+                display: flex !important; /* نضمن ظهورها كنظام عمودي */
+                flex-direction: column;
+                gap: 0;
+                padding: 16px 0;
+                transform: translateX(100%);   /* مخفية خارج الشاشة */
+                transition: transform 0.3s ease;
+                z-index: 1001;
             }
-            
-            .products-grid {
-                grid-template-columns: 1fr;
+
+            .nav-links li { border-bottom: 1px solid #eee; }
+            .nav-links li:last-child { border-bottom: 0; }
+
+            .nav-links a {
+                display: block;
+                padding: 14px 18px;
+                color: #333;
+                font-size: 16px;
+            }
+
+            /* عند الفتح */
+            .nav-links.open { transform: translateX(0); }
+
+            /* طبقة التعتيم */
+            .nav-overlay {
+                position: fixed;
+                inset: 0;
+                background: rgba(0,0,0,0.35);
+                z-index: 1000;
+            }
+            .nav-overlay[hidden] { display: none; }
+
+            /* شبكة المنتجات عمود واحد على الجوال */
+            .products-grid { grid-template-columns: 1fr; }
+
+            /* منع تمرير الصفحة عند فتح المنيو */
+            body.no-scroll {
+                overflow: hidden;
+                touch-action: none;
             }
         }
     </style>
@@ -345,25 +409,25 @@
 <body>
     <!-- Header -->
     <header>
-  <nav class="container site-nav">
-    <div class="logo">Ajlib</div>
+      <nav class="container site-nav">
+        <div class="logo">Ajlib</div>
 
-    <!-- زر المنيو للجوال -->
-    <button class="menu-toggle" aria-label="فتح القائمة" aria-expanded="false">☰</button>
+        <!-- زر المنيو للجوال -->
+        <button class="menu-toggle" aria-label="فتح القائمة" aria-expanded="false">☰</button>
 
-    <!-- قائمة الروابط -->
-    <ul class="nav-links">
-      <li><a href="#home">الرئيسية</a></li>
-      <li><a href="#products">المنتجات</a></li>
-      <li><a href="#about">من نحن</a></li>
-      <li><a href="#contact">اتصل بنا</a></li>
-      <li><a href="cart.html" class="cart-link">🛒 السلة</a></li>
-    </ul>
-  </nav>
+        <!-- قائمة الروابط -->
+        <ul class="nav-links">
+          <li><a href="#home">الرئيسية</a></li>
+          <li><a href="#products">المنتجات</a></li>
+          <li><a href="#about">من نحن</a></li>
+          <li><a href="#contact">اتصل بنا</a></li>
+          <li><a href="cart.html" class="cart-link">🛒 السلة</a></li>
+        </ul>
+      </nav>
 
-  <!-- طبقة تعتيم تُستخدم عند فتح القائمة على الجوال -->
-  <div class="nav-overlay" hidden></div>
-</header>
+      <!-- طبقة تعتيم تُستخدم عند فتح القائمة على الجوال -->
+      <div class="nav-overlay" hidden></div>
+    </header>
 
     <!-- Hero Section -->
     <section class="hero" id="home">
@@ -655,8 +719,47 @@
       }
     });
   });
+
+  /* ===== منيو الجوال الاحترافية ===== */
+  (function() {
+    const toggleBtn = document.querySelector('.menu-toggle');
+    const navLinks  = document.querySelector('.nav-links');
+    const overlay   = document.querySelector('.nav-overlay');
+
+    if (!toggleBtn || !navLinks || !overlay) return;
+
+    function openMenu() {
+      navLinks.classList.add('open');     // تظهر القائمة
+      overlay.hidden = false;             // أظهر التعتيم
+      document.body.classList.add('no-scroll'); // امنع التمرير
+      toggleBtn.setAttribute('aria-expanded', 'true');
+    }
+
+    function closeMenu() {
+      navLinks.classList.remove('open');
+      overlay.hidden = true;
+      document.body.classList.remove('no-scroll');
+      toggleBtn.setAttribute('aria-expanded', 'false');
+    }
+
+    toggleBtn.addEventListener('click', () => {
+      navLinks.classList.contains('open') ? closeMenu() : openMenu();
+    });
+
+    // اغلاق عند الضغط على التعتيم
+    overlay.addEventListener('click', closeMenu);
+
+    // اغلاق عند الضغط على أي رابط
+    navLinks.querySelectorAll('a').forEach(a => {
+      a.addEventListener('click', closeMenu);
+    });
+
+    // اغلاق بزر ESC
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeMenu();
+    });
+  })();
 </script>
 
 </body>
 </html>
-
