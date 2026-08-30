@@ -67,6 +67,41 @@ const sendOrderEmail = async (session) => {
   if (!response.ok) throw new Error(`Email provider rejected request: ${response.status}`);
 };
 
+const saveOrder = async (session) => {
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SECRET_KEY) return;
+  const metadata = session.metadata || {};
+  const customerEmail = session.customer_details?.email || session.customer_email || '';
+  const items = String(metadata.items || '').split(',').filter(Boolean).map(item => {
+    const separator = item.lastIndexOf(':');
+    return { variant: separator >= 0 ? item.slice(0, separator) : item, quantity: Number(separator >= 0 ? item.slice(separator + 1) : 1) };
+  });
+  const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/orders?on_conflict=stripe_session_id`, {
+    method: 'POST',
+    headers: {
+      apikey: process.env.SUPABASE_SECRET_KEY,
+      Authorization: `Bearer ${process.env.SUPABASE_SECRET_KEY}`,
+      'Content-Type': 'application/json',
+      Prefer: 'resolution=merge-duplicates,return=minimal'
+    },
+    body: JSON.stringify({
+      order_number: metadata.order_id || session.client_reference_id || session.id,
+      user_id: metadata.user_id || null,
+      customer_email: customerEmail,
+      customer_name: metadata.customer_name || '',
+      customer_phone: metadata.phone || '',
+      shipping_address: metadata.address || '',
+      items,
+      amount_total: session.amount_total || 0,
+      currency: session.currency || 'aed',
+      status: 'paid',
+      stripe_session_id: session.id,
+      stripe_payment_intent_id: session.payment_intent || null,
+      paid_at: new Date((session.created || Math.floor(Date.now() / 1000)) * 1000).toISOString()
+    })
+  });
+  if (!response.ok) throw new Error(`Order database rejected request: ${response.status}`);
+};
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!process.env.STRIPE_WEBHOOK_SECRET || !process.env.RESEND_API_KEY) {
@@ -79,11 +114,10 @@ export default async function handler(req, res) {
     }
     const event = JSON.parse(raw.toString('utf8'));
     if (event.type === 'checkout.session.completed' && event.data?.object?.payment_status === 'paid') {
-      await sendOrderEmail(event.data.object);
+      await Promise.all([saveOrder(event.data.object), sendOrderEmail(event.data.object)]);
     }
     return res.status(200).json({ received: true });
   } catch (error) {
     return res.status(500).json({ error: error.message || 'Webhook failed' });
   }
 }
-
