@@ -79,7 +79,6 @@ const saveOrder = async (session) => {
     method: 'POST',
     headers: {
       apikey: process.env.SUPABASE_SECRET_KEY,
-      Authorization: `Bearer ${process.env.SUPABASE_SECRET_KEY}`,
       'Content-Type': 'application/json',
       Prefer: 'resolution=merge-duplicates,return=minimal'
     },
@@ -99,7 +98,10 @@ const saveOrder = async (session) => {
       paid_at: new Date((session.created || Math.floor(Date.now() / 1000)) * 1000).toISOString()
     })
   });
-  if (!response.ok) throw new Error(`Order database rejected request: ${response.status}`);
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Order database rejected request: ${response.status} ${detail.slice(0, 300)}`);
+  }
 };
 
 export default async function handler(req, res) {
