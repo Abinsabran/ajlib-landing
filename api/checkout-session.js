@@ -35,6 +35,14 @@ export default async function handler(req, res) {
     }
     const itemSummary = Object.entries(grouped).map(([key, count]) => `${key}:${count}`).join(',').slice(0, 500);
     const customer = order.customer || {};
+    let userId = '';
+    const accessToken = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+    if (accessToken && process.env.SUPABASE_URL && process.env.SUPABASE_PUBLISHABLE_KEY) {
+      const authResponse = await fetch(`${process.env.SUPABASE_URL}/auth/v1/user`, {
+        headers: { apikey: process.env.SUPABASE_PUBLISHABLE_KEY, Authorization: `Bearer ${accessToken}` }
+      });
+      if (authResponse.ok) userId = String((await authResponse.json()).id || '');
+    }
     const origin = `https://${req.headers['x-forwarded-host'] || req.headers.host}`;
     const params = new URLSearchParams({
       mode: 'payment',
@@ -56,6 +64,7 @@ export default async function handler(req, res) {
       'metadata[phone]': String(customer.phone || '').slice(0, 500),
       'metadata[address]': `${customer.emirate || ''}, ${customer.city || ''}, ${customer.address || ''}`.slice(0, 500),
       'metadata[notes]': String(customer.notes || '').slice(0, 500),
+      'metadata[user_id]': userId,
       success_url: `${origin}/?payment=success&id=${encodeURIComponent(order.id)}&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/?payment=cancelled&id=${encodeURIComponent(order.id)}`
     });
@@ -65,4 +74,3 @@ export default async function handler(req, res) {
     return res.status(502).json({ error: error.message || 'تعذر الاتصال ببوابة Stripe' });
   }
 }
-
