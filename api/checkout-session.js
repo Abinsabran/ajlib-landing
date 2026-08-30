@@ -30,8 +30,7 @@ export default async function handler(req, res) {
 
     const grouped = {};
     for (const item of order.cart?.items || []) {
-      const key = `${item.color}-${item.size}`;ui_mode: 'hosted'
-      ui_mode: 'hosted_page'
+      const key = `${item.color}-${item.size}`;
       grouped[key] = (grouped[key] || 0) + 1;
     }
     const itemSummary = Object.entries(grouped).map(([key, count]) => `${key}:${count}`).join(',').slice(0, 500);
@@ -39,7 +38,7 @@ export default async function handler(req, res) {
     const origin = `https://${req.headers['x-forwarded-host'] || req.headers.host}`;
     const params = new URLSearchParams({
       mode: 'payment',
-      ui_mode: 'hosted',
+      ui_mode: 'hosted_page',
       client_reference_id: String(order.id),
       customer_email: String(customer.email || ''),
       'phone_number_collection[enabled]': 'true',
@@ -63,3 +62,4 @@ export default async function handler(req, res) {
     return res.status(502).json({ error: error.message || 'تعذر الاتصال ببوابة Stripe' });
   }
 }
+
