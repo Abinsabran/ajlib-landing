@@ -30,7 +30,8 @@ export default async function handler(req, res) {
 
     const grouped = {};
     for (const item of order.cart?.items || []) {
-      const key = `${item.color}-${item.size}`;
+      const key = `${item.color}-${item.size}`;ui_mode: 'hosted'
+      ui_mode: 'hosted_page'
       grouped[key] = (grouped[key] || 0) + 1;
     }
     const itemSummary = Object.entries(grouped).map(([key, count]) => `${key}:${count}`).join(',').slice(0, 500);
