@@ -79,6 +79,7 @@ const saveOrder = async (session) => {
     method: 'POST',
     headers: {
       apikey: process.env.SUPABASE_SECRET_KEY,
+      Authorization: `Bearer ${process.env.SUPABASE_SECRET_KEY}`,
       'Content-Type': 'application/json',
       Prefer: 'resolution=merge-duplicates,return=minimal'
     },
