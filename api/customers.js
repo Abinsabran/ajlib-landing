@@ -20,14 +20,24 @@ export default async function handler(req,res){
       const ordersRes=await db('/rest/v1/orders?select=user_id,customer_email,status,amount_total');
       if(!ordersRes.ok){const detail=await ordersRes.text();return res.status(502).json({error:'تعذر تحميل ملخص طلبات العملاء',detail:detail.slice(0,300)})}
       const orderRows=await ordersRes.json(),orders=Array.isArray(orderRows)?orderRows:[];
-      return res.status(200).json(users.map(u=>{const p=profiles.get(u.id)||{},own=orders.filter(o=>o.user_id===u.id||String(o.customer_email||'').toLowerCase()===String(u.email||'').toLowerCase());return{id:u.id,email:u.email,created_at:u.created_at,last_sign_in_at:u.last_sign_in_at,...p,orders_count:own.length,total_spent:own.filter(o=>!['cancelled','refunded'].includes(o.status)).reduce((s,o)=>s+Number(o.amount_total||0),0)}}));
+      return res.status(200).json(users.map(u=>{const p=profiles.get(u.id)||{},own=orders.filter(o=>o.user_id===u.id||String(o.customer_email||'').toLowerCase()===String(u.email||'').toLowerCase());return{id:u.id,email:u.email,created_at:u.created_at,last_sign_in_at:u.last_sign_in_at,...p,orders_count:own.length,active_orders:own.filter(o=>!['delivered','cancelled','refunded'].includes(o.status)).length,total_spent:own.filter(o=>!['cancelled','refunded'].includes(o.status)).reduce((s,o)=>s+Number(o.amount_total||0),0)}}));
     }
     const body=req.body||{},id=String(body.id||''); if(!id)return res.status(400).json({error:'معرّف العميل مطلوب'});
     if(req.method==='PATCH'){
+      const email=String(body.email||'').trim().toLowerCase();
+      if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return res.status(400).json({error:'أدخل بريدًا إلكترونيًا صحيحًا'});
+      const currentRes=await fetch(`${process.env.SUPABASE_URL}/auth/v1/admin/users/${encodeURIComponent(id)}`,{headers:serviceHeaders()});
+      if(!currentRes.ok)return res.status(404).json({error:'حساب العميل غير موجود'});
+      const current=await currentRes.json(),oldEmail=String(current.email||'').toLowerCase();
+      if(email!==oldEmail){
+        const authUpdate=await fetch(`${process.env.SUPABASE_URL}/auth/v1/admin/users/${encodeURIComponent(id)}`,{method:'PUT',headers:serviceHeaders(),body:JSON.stringify({email,email_confirm:true})});
+        if(!authUpdate.ok){const detail=await authUpdate.json().catch(()=>({}));return res.status(409).json({error:detail.msg||detail.message||'تعذر تغيير البريد؛ قد يكون مستخدمًا في حساب آخر'})}
+        await db(`/rest/v1/orders?or=(user_id.eq.${encodeURIComponent(id)},customer_email.eq.${encodeURIComponent(oldEmail)})`,{method:'PATCH',body:JSON.stringify({customer_email:email})});
+      }
       const profile={full_name:String(body.full_name||'').trim(),phone:String(body.phone||'').trim(),emirate:String(body.emirate||'').trim(),city:String(body.city||'').trim(),address:String(body.address||'').trim(),delivery_notes:String(body.delivery_notes||'').trim()};
       const p=await db(`/rest/v1/profiles?id=eq.${encodeURIComponent(id)}`,{method:'PATCH',headers:{Prefer:'return=representation'},body:JSON.stringify(profile)});
       if(!p.ok)return res.status(502).json({error:'تعذر حفظ بيانات العميل'});
-      return res.status(200).json((await p.json())[0]||profile);
+      return res.status(200).json({email,...((await p.json())[0]||profile)});
     }
     if(req.method==='DELETE'){
       const active=await db(`/rest/v1/orders?user_id=eq.${encodeURIComponent(id)}&status=in.(paid,processing,packed,shipped)&select=id`);
