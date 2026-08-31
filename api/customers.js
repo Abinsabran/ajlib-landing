@@ -11,12 +11,15 @@ export default async function handler(req,res){
     if(!(await isAdmin(req.headers.authorization)))return res.status(403).json({error:'هذه العملية متاحة لمالك AJLIB فقط'});
     if(req.method==='GET'){
       const usersRes=await fetch(`${process.env.SUPABASE_URL}/auth/v1/admin/users?per_page=1000`,{headers:serviceHeaders()});
-      if(!usersRes.ok)return res.status(502).json({error:'تعذر تحميل العملاء'});
+      if(!usersRes.ok){const detail=await usersRes.text();return res.status(502).json({error:'تعذر تحميل حسابات العملاء',detail:detail.slice(0,300)})}
       const users=(await usersRes.json()).users||[];
       const profilesRes=await db('/rest/v1/profiles?select=id,full_name,phone,emirate,city,address,delivery_notes,role');
-      const profiles=new Map((await profilesRes.json()).map(p=>[p.id,p]));
+      if(!profilesRes.ok){const detail=await profilesRes.text();return res.status(502).json({error:'تعذر تحميل بيانات العملاء',detail:detail.slice(0,300)})}
+      const profileRows=await profilesRes.json();
+      const profiles=new Map((Array.isArray(profileRows)?profileRows:[]).map(p=>[p.id,p]));
       const ordersRes=await db('/rest/v1/orders?select=user_id,customer_email,status,amount_total');
-      const orders=await ordersRes.json();
+      if(!ordersRes.ok){const detail=await ordersRes.text();return res.status(502).json({error:'تعذر تحميل ملخص طلبات العملاء',detail:detail.slice(0,300)})}
+      const orderRows=await ordersRes.json(),orders=Array.isArray(orderRows)?orderRows:[];
       return res.status(200).json(users.map(u=>{const p=profiles.get(u.id)||{},own=orders.filter(o=>o.user_id===u.id||String(o.customer_email||'').toLowerCase()===String(u.email||'').toLowerCase());return{id:u.id,email:u.email,created_at:u.created_at,last_sign_in_at:u.last_sign_in_at,...p,orders_count:own.length,total_spent:own.filter(o=>!['cancelled','refunded'].includes(o.status)).reduce((s,o)=>s+Number(o.amount_total||0),0)}}));
     }
     const body=req.body||{},id=String(body.id||''); if(!id)return res.status(400).json({error:'معرّف العميل مطلوب'});
