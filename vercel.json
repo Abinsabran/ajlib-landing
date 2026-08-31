@@ -4,6 +4,12 @@
       "maxDuration": 10
     }
   },
+  "rewrites": [
+    { "source": "/privacy", "destination": "/legal.html" },
+    { "source": "/terms", "destination": "/legal.html" },
+    { "source": "/returns", "destination": "/legal.html" },
+    { "source": "/account-deletion", "destination": "/legal.html" }
+  ],
   "headers": [
     {
       "source": "/(.*)",
