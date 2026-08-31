@@ -105,6 +105,20 @@ const saveOrder = async (session) => {
   }
 };
 
+const updateInventory = async (session) => {
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SECRET_KEY) return;
+  const requested = String(session.metadata?.items || '').split(',').filter(Boolean).map(item => {
+    const separator = item.lastIndexOf(':');
+    return { variant: separator >= 0 ? item.slice(0, separator) : item, quantity: Number(separator >= 0 ? item.slice(separator + 1) : 1) || 1 };
+  });
+  const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/process_paid_inventory`, {
+    method: 'POST',
+    headers: { apikey: process.env.SUPABASE_SECRET_KEY, Authorization: `Bearer ${process.env.SUPABASE_SECRET_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: session.id, requested })
+  });
+  if (!response.ok) throw new Error('Inventory update failed');
+};
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!process.env.STRIPE_WEBHOOK_SECRET || !process.env.RESEND_API_KEY) {
@@ -117,7 +131,7 @@ export default async function handler(req, res) {
     }
     const event = JSON.parse(raw.toString('utf8'));
     if (event.type === 'checkout.session.completed' && event.data?.object?.payment_status === 'paid') {
-      await Promise.all([saveOrder(event.data.object), sendOrderEmail(event.data.object)]);
+      await Promise.all([saveOrder(event.data.object), sendOrderEmail(event.data.object), updateInventory(event.data.object)]);
     }
     return res.status(200).json({ received: true });
   } catch (error) {
