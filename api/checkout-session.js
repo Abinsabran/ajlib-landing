@@ -43,9 +43,16 @@ export default async function handler(req, res) {
       });
       if (!inventoryResponse.ok) throw new Error('تعذر التحقق من توفر المخزون');
       const shortages = await inventoryResponse.json();
-      if (shortages.length) return res.status(409).json({ error: `الكمية غير متوفرة حاليًا: ${shortages.map(x => `${x.variant} (متاح ${x.available})`).join('، ')}` });
+      const unavailable = shortages.filter(x => !x.allow_preorder);
+      if (unavailable.length) return res.status(409).json({ error: `الكمية غير متوفرة حاليًا: ${unavailable.map(x => `${x.variant} (متاح ${x.available})`).join('، ')}` });
+      order.preorders = shortages.filter(x => x.allow_preorder);
     }
     const customer = order.customer || {};
+    const customerEmail = String(customer.email || '').trim().toLowerCase();
+    const emailDomain = customerEmail.split('@')[1] || '';
+    const commonDomainTypos = new Set(['gamil.com', 'gmial.com', 'gmai.com', 'gmail.co', 'hotnail.com', 'hotmai.com', 'outlok.com', 'yaho.com']);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail)) return res.status(400).json({ error: 'اكتب بريدًا إلكترونيًا صحيحًا' });
+    if (commonDomainTypos.has(emailDomain)) return res.status(400).json({ error: 'يبدو أن نطاق البريد مكتوب بشكل غير صحيح. راجع gmail أو مزود بريدك قبل الدفع.' });
     let userId = '';
     const accessToken = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
     if (accessToken && process.env.SUPABASE_URL && process.env.SUPABASE_PUBLISHABLE_KEY) {
@@ -59,8 +66,8 @@ export default async function handler(req, res) {
       mode: 'payment',
       ui_mode: 'hosted_page',
       client_reference_id: String(order.id),
-      customer_email: String(customer.email || ''),
-      'payment_intent_data[receipt_email]': String(customer.email || ''),
+      customer_email: customerEmail,
+      'payment_intent_data[receipt_email]': customerEmail,
       'payment_intent_data[description]': `AJLIB order ${String(order.id)}`,
       'invoice_creation[enabled]': 'true',
       'phone_number_collection[enabled]': 'true',
@@ -76,6 +83,7 @@ export default async function handler(req, res) {
       'metadata[address]': `${customer.emirate || ''}, ${customer.city || ''}, ${customer.address || ''}`.slice(0, 500),
       'metadata[notes]': String(customer.notes || '').slice(0, 500),
       'metadata[user_id]': userId,
+      'metadata[preorder]': (order.preorders||[]).map(x=>`${x.variant}:${x.preorder_eta||'سيحدد لاحقًا'}`).join(',').slice(0,500),
       success_url: `${origin}/?payment=success&id=${encodeURIComponent(order.id)}&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/?payment=cancelled&id=${encodeURIComponent(order.id)}`
     });
