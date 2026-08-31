@@ -34,6 +34,17 @@ export default async function handler(req, res) {
       grouped[key] = (grouped[key] || 0) + 1;
     }
     const itemSummary = Object.entries(grouped).map(([key, count]) => `${key}:${count}`).join(',').slice(0, 500);
+    const requestedItems = Object.entries(grouped).map(([variant, quantity]) => ({ variant, quantity }));
+    if (process.env.SUPABASE_URL && process.env.SUPABASE_SECRET_KEY) {
+      const inventoryResponse = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/check_inventory`, {
+        method: 'POST',
+        headers: { apikey: process.env.SUPABASE_SECRET_KEY, Authorization: `Bearer ${process.env.SUPABASE_SECRET_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requested: requestedItems })
+      });
+      if (!inventoryResponse.ok) throw new Error('تعذر التحقق من توفر المخزون');
+      const shortages = await inventoryResponse.json();
+      if (shortages.length) return res.status(409).json({ error: `الكمية غير متوفرة حاليًا: ${shortages.map(x => `${x.variant} (متاح ${x.available})`).join('، ')}` });
+    }
     const customer = order.customer || {};
     let userId = '';
     const accessToken = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
