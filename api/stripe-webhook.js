@@ -36,6 +36,7 @@ const sendOrderEmail = async (session) => {
   const orderId = metadata.order_id || session.client_reference_id || session.id;
   const customerEmail = session.customer_details?.email || session.customer_email || '';
   const amount = new Intl.NumberFormat('ar-AE', { style: 'currency', currency: 'AED' }).format((session.amount_total || 0) / 100);
+  const shippingAmount = new Intl.NumberFormat('ar-AE', { style: 'currency', currency: 'AED' }).format(Number(metadata.shipping_amount || 0) / 100);
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
@@ -58,6 +59,9 @@ const sendOrderEmail = async (session) => {
         <p><b>الهاتف:</b> <span dir="ltr">${escapeHtml(metadata.phone)}</span></p>
         <p><b>البريد:</b> ${escapeHtml(customerEmail)}</p>
         <p><b>العنوان:</b> ${escapeHtml(metadata.address)}</p>
+        <p><b>الدولة:</b> ${escapeHtml(metadata.country_name || metadata.country_code)}</p>
+        <p><b>الشحن:</b> ${escapeHtml(shippingAmount)} — ${escapeHtml(metadata.shipping_zone || '')}</p>
+        <p style="color:#686b62">الرسوم الجمركية أو ضرائب الاستيراد المحلية — إن وُجدت — يتحملها المستلم.</p>
         <p><b>ملاحظات:</b> ${escapeHtml(metadata.notes || 'لا توجد')}</p>
         <hr><h2>الألوان والمقاسات</h2><ul>${formatItems(metadata.items)}</ul>
         <p style="color:#686b62">تم إرسال هذه الرسالة بعد تأكيد الدفع من Stripe.</p>
@@ -90,7 +94,14 @@ const saveOrder = async (session) => {
       customer_name: metadata.customer_name || '',
       customer_phone: metadata.phone || '',
       shipping_address: metadata.address || '',
+      shipping_address_id: /^[0-9a-f-]{36}$/i.test(metadata.address_id || '') ? metadata.address_id : null,
+      shipping_country_code: metadata.country_code || null,
+      shipping_country_name: metadata.country_name || null,
+      shipping_region: metadata.region || null,
+      shipping_postal_code: metadata.postal_code || null,
       items,
+      product_amount: Number(metadata.product_amount || 0),
+      shipping_amount: Number(metadata.shipping_amount || 0),
       amount_total: session.amount_total || 0,
       currency: session.currency || 'aed',
       status: 'paid',
