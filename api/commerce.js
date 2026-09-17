@@ -345,18 +345,20 @@ const handleFulfillmentPreflight = async (req, res) => {
     const balance = await getAccountBalance();
     // Field names are echoed so the real response shape can be confirmed
     // rather than assumed; CJ's docs do not publish them.
-    out.balance = { status: balance.status, code: balance.body?.code, dataKeys: Object.keys(balance.body?.data ?? {}), data: balance.body?.data ?? null, parsedUSD: parseCjBalanceUSD(balance.body) };
+    out.balance = { status: balance.status, code: balance.body?.code, message: balance.body?.message ?? null, result: balance.body?.result ?? null, dataKeys: Object.keys(balance.body?.data ?? {}), data: balance.body?.data ?? null, parsedUSD: parseCjBalanceUSD(balance.body) };
   } catch (error) { out.balance = { error: error.message }; }
 
   out.freight = [];
   for (const quantity of [5, 10]) {
     try {
       const { resolved } = resolveFulfillmentVariants([{ variant: 'أسود-L', quantity }]);
-      const { availableMethods, selection } = await resolveFreightAndLogistics({ resolvedItems: resolved, destinationCountryCode: 'AE' });
+      const { availableMethods, selection, raw } = await resolveFreightAndLogistics({ resolvedItems: resolved, destinationCountryCode: 'AE' });
       out.freight.push({
         quantity,
         methods: availableMethods.map(m => ({ name: m.logisticName, cost: Number(m.totalPostageFee ?? m.logisticPrice), aging: m.logisticAging ?? null })),
-        selection
+        selection,
+        rawCode: raw?.body?.code ?? null,
+        rawMessage: raw?.body?.message ?? null
       });
     } catch (error) { out.freight.push({ quantity, error: error.message }); }
   }
