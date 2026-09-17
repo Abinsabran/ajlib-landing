@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import handler from '../api/order-quote.js';
+import handler from '../api/commerce.js';
 
-// Locks /api/order-quote's response shape against the fields the ALREADY
-// SHIPPED Expo/iOS app actually reads (verified against
+// Locks the order-quote resource's response shape against the fields the
+// ALREADY SHIPPED Expo/iOS app actually reads (verified against
 // outputs/ajlib-mobile/App.js): data.error, data.supportedCountries,
 // productSubtotal, unitPrice, shipping, total, minDays, maxDays,
 // isFreeShipping. showOmanHighRateNote is read with optional chaining by the
@@ -11,6 +11,11 @@ import handler from '../api/order-quote.js';
 // here — it was invented by the app's own pre-launch validation script, not
 // by any real shipping rule, so the note silently does not render instead of
 // asserting a fabricated business rule.
+//
+// The public URL /api/order-quote (which the shipped app is hardcoded to
+// call) is preserved via a vercel.json rewrite to
+// /api/commerce?resource=order-quote — see api/commerce.js. Tests here call
+// the consolidated handler directly with that same resource param.
 
 const withEnv = async (vars, fn) => {
   const previous = {};
@@ -19,7 +24,7 @@ const withEnv = async (vars, fn) => {
   finally { for (const key of Object.keys(vars)) { if (previous[key] !== undefined) process.env[key] = previous[key]; } }
 };
 
-const makeReq = (query) => ({ method: 'GET', query });
+const makeReq = (query) => ({ method: 'GET', query: { resource: 'order-quote', ...query } });
 const makeRes = () => {
   const res = { statusCode: null, body: null };
   res.status = (code) => { res.statusCode = code; return res; };

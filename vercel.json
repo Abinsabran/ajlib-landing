@@ -8,7 +8,11 @@
     { "source": "/privacy", "destination": "/legal.html" },
     { "source": "/terms", "destination": "/legal.html" },
     { "source": "/returns", "destination": "/legal.html" },
-    { "source": "/account-deletion", "destination": "/legal.html" }
+    { "source": "/account-deletion", "destination": "/legal.html" },
+    { "source": "/api/order-quote", "destination": "/api/commerce?resource=order-quote" },
+    { "source": "/api/catalog", "destination": "/api/commerce?resource=catalog" },
+    { "source": "/api/currency", "destination": "/api/commerce?resource=currency" },
+    { "source": "/api/tabby-availability", "destination": "/api/commerce?resource=tabby-availability" }
   ],
   "headers": [
     {
