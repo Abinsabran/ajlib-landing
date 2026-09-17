@@ -5,6 +5,7 @@ import { COUNTRY_CURRENCY, currencyForCountry, convertAedFilsForDisplay } from '
 import { isTabbyPotentiallyAvailable, createCheckoutSession, verifyPayment } from '../lib/tabby-client.js';
 import { buildValidatedOrder, OrderValidationError } from '../lib/order-validation.js';
 import { persistPaidOrder } from './stripe-webhook.js';
+import { rawCjGet, rawAuthInfo } from '../lib/cj-client.js';
 
 // Grouped, provider-neutral handler for the foundation endpoints added
 // alongside the existing per-feature functions (checkout-session.js,
@@ -292,13 +293,47 @@ const handleTabbyVerify = async (req, res) => {
 // they've served their purpose. rawCjGet/tabbyDiagnosticPost/tabbyRawGet
 // remain in lib/ for any future re-sync need.
 
+// ---- Phase 3 TEMPORARY, read-only CJ API-store discovery diagnostics -----
+// GET only, never touches /product/conn/connection or anything containing
+// "save" (the three write endpoints in the official API-store flow) even
+// though a GET could not trigger a write on a correctly-built REST API —
+// out of extra caution. Remove once Phase 3 discovery is complete.
+
+const handleCjAuthDiagnostic = async (req, res) => {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+  try {
+    const result = await rawAuthInfo();
+    return res.status(200).json(result);
+  } catch (error) {
+    return res.status(502).json({ error: error.message });
+  }
+};
+
+const CJ_DIAGNOSTIC_BLOCKED_SUBSTRINGS = ['conn/connection', 'save', 'order', 'warehouse', 'shipping'];
+const handleCjDiagnostic = async (req, res) => {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+  const path = String(req.query.path || '');
+  if (!path.startsWith('/product')) return res.status(400).json({ error: 'Diagnostic only allows /product* CJ paths' });
+  if (CJ_DIAGNOSTIC_BLOCKED_SUBSTRINGS.some(s => path.toLowerCase().includes(s))) {
+    return res.status(400).json({ error: 'Path blocked for safety (write-adjacent)' });
+  }
+  try {
+    const result = await rawCjGet(path);
+    return res.status(200).json(result);
+  } catch (error) {
+    return res.status(502).json({ error: error.message });
+  }
+};
+
 const HANDLERS = {
   'order-quote': handleOrderQuote,
   catalog: handleCatalog,
   currency: handleCurrency,
   'tabby-availability': handleTabbyAvailability,
   'tabby-checkout': handleTabbyCheckout,
-  'tabby-verify': handleTabbyVerify
+  'tabby-verify': handleTabbyVerify,
+  'cj-auth-diagnostic': handleCjAuthDiagnostic,
+  'cj-diagnostic': handleCjDiagnostic
 };
 
 export default async function handler(req, res) {
