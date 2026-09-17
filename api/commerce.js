@@ -5,6 +5,8 @@ import { COUNTRY_CURRENCY, currencyForCountry, convertAedFilsForDisplay } from '
 import { isTabbyPotentiallyAvailable, createCheckoutSession, verifyPayment } from '../lib/tabby-client.js';
 import { buildValidatedOrder, OrderValidationError } from '../lib/order-validation.js';
 import { persistPaidOrder } from './stripe-webhook.js';
+import { calculateFreight } from '../lib/cj-client.js';
+import { CJ_VARIANT_MAP } from '../lib/cj-variant-map.js';
 
 // Grouped, provider-neutral handler for the foundation endpoints added
 // alongside the existing per-feature functions (checkout-session.js,
@@ -305,11 +307,29 @@ const handleTabbyVerify = async (req, res) => {
 // the real logistics methods valid across all 8 supported destinations via
 // GET .../logistic/freightCalculate. See the Phase 3 report for the data.
 
+// TEMPORARY (Phase 3 continuation): re-added only to re-run freight
+// calculation at real order quantities (5/10/15/20/50) instead of qty=1.
+// Same hardcoded-endpoint safety as before — remove once done.
+const handleCjFreightDiagnostic = async (req, res) => {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+  try {
+    const vid = String(req.query.vid || CJ_VARIANT_MAP[0].cjVariantId);
+    const endCountryCode = String(req.query.endCountryCode || '');
+    const quantity = Number(req.query.quantity || 5);
+    if (!endCountryCode) return res.status(400).json({ error: 'endCountryCode required' });
+    const result = await calculateFreight({ startCountryCode: 'CN', endCountryCode, vid, quantity });
+    return res.status(200).json(result);
+  } catch (error) {
+    return res.status(502).json({ error: error.message });
+  }
+};
+
 const HANDLERS = {
   'order-quote': handleOrderQuote,
   catalog: handleCatalog,
   currency: handleCurrency,
   'tabby-availability': handleTabbyAvailability,
+  'cj-freight-diagnostic': handleCjFreightDiagnostic,
   'tabby-checkout': handleTabbyCheckout,
   'tabby-verify': handleTabbyVerify
 };
