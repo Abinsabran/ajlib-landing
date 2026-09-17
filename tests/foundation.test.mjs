@@ -174,6 +174,16 @@ test('the storefront enforces the same 5-unit minimum as the server', async () =
   assert.ok(Number(input[2]) >= MIN_QUANTITY);
 });
 
+test('every storefront route to a sub-minimum order is closed', async () => {
+  const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+  // Reducing a group's quantity.
+  assert.ok(/setCartGroupQuantity[\s\S]{0,200}?<MIN_QTY/.test(html), 'group quantity reduction must check the minimum');
+  // Removing a whole group and stranding the remainder.
+  assert.ok(/removeCartGroup[\s\S]{0,200}?<MIN_QTY/.test(html), 'group removal must not strand a sub-minimum cart');
+  // Final gate: opening checkout at all.
+  assert.ok(/beginCheckout[\s\S]{0,160}?cart\.items\.length<MIN_QTY/.test(html), 'checkout must be gated on the minimum');
+});
+
 test('storefront savings badges match the server calculation exactly, with no badge below 1%', async () => {
   const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
   const expr = html.match(/savings=\(1-unit\/baseline\)\*100,discount=savings>=1\?Math\.round\(savings\):0/);
