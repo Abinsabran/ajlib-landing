@@ -292,13 +292,30 @@ const handleTabbyVerify = async (req, res) => {
 // they've served their purpose. rawCjGet/tabbyDiagnosticPost/tabbyRawGet
 // remain in lib/ for any future re-sync need.
 
+// TEMPORARY: read-only, non-secret-exposing lookup by stripe_session_id to
+// confirm exactly one row exists after a real persistence verification.
+// Returns only id/order_number/stripe_session_id/status — never any
+// customer PII beyond what's already non-sensitive, and never a secret.
+// Remove once this specific confirmation is done.
+const handleOrderLookupDiagnostic = async (req, res) => {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SECRET_KEY) return res.status(503).json({ error: 'Supabase not configured' });
+  const sessionId = String(req.query.stripe_session_id || '');
+  const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/orders?stripe_session_id=eq.${encodeURIComponent(sessionId)}&select=id,order_number,stripe_session_id,status,amount_total,currency`, {
+    headers: { apikey: process.env.SUPABASE_SECRET_KEY, Authorization: `Bearer ${process.env.SUPABASE_SECRET_KEY}` }
+  });
+  const rows = await response.json();
+  return res.status(response.status).json({ count: Array.isArray(rows) ? rows.length : null, rows });
+};
+
 const HANDLERS = {
   'order-quote': handleOrderQuote,
   catalog: handleCatalog,
   currency: handleCurrency,
   'tabby-availability': handleTabbyAvailability,
   'tabby-checkout': handleTabbyCheckout,
-  'tabby-verify': handleTabbyVerify
+  'tabby-verify': handleTabbyVerify,
+  'order-lookup-diagnostic': handleOrderLookupDiagnostic
 };
 
 export default async function handler(req, res) {
