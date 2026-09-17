@@ -142,6 +142,36 @@ test('tabby-verify treats an EXPIRED session (real sandbox-observed status) as n
   });
 });
 
+test('an email-provider failure does not prevent the order/inventory writes from being attempted (live Preview finding)', async () => {
+  // Live Preview walkthrough: a real completed Tabby sandbox payment
+  // verified successfully, but RESEND_API_KEY was rejected (401) by Resend,
+  // so the overall response was 502. Because persistPaidOrder runs
+  // save/email/inventory in parallel (Promise.all), the order and inventory
+  // calls are still dispatched independently of the email failure — this
+  // locks that in so a future refactor doesn't accidentally serialize them
+  // behind email success.
+  await withEnv({ TABBY_MODE: 'test', TABBY_SECRET_KEY: 'sk_test_x', SUPABASE_URL: 'https://example.supabase.co', SUPABASE_SECRET_KEY: 'service_role_test', RESEND_API_KEY: 'invalid_key' }, async () => {
+    const originalFetch = globalThis.fetch;
+    const calls = [];
+    globalThis.fetch = async (url, options = {}) => {
+      calls.push(String(url));
+      if (String(url).includes('/payments/')) return { ok: true, json: async () => ({ id: 'pay_email_fail', status: 'CLOSED', amount: '119.00', currency: 'AED' }) };
+      if (String(url).includes('api.resend.com')) return { ok: false, status: 401 }; // matches the real observed failure
+      if (String(url).includes('/rest/v1/orders')) return { ok: true, text: async () => '' };
+      if (String(url).includes('/rpc/process_paid_inventory')) return { ok: true, json: async () => ({}) };
+      if (String(url).includes('/rpc/check_inventory')) return { ok: true, json: async () => ([]) };
+      if (String(url).includes('/rest/v1/shipping_zones')) return { ok: false };
+      throw new Error(`unexpected fetch in test: ${url}`);
+    };
+    try {
+      const res = await handler({ method: 'POST', query: { resource: 'tabby-verify' }, body: { payment_id: 'pay_email_fail', order: validOrder({ id: 'AJ-TABBY-EMAILFAIL-1' }) }, headers: {} }, makeRes());
+      assert.equal(res.statusCode, 502); // overall call reports failure...
+      assert.ok(calls.some(u => u.includes('/rest/v1/orders')), '...but the order upsert was still attempted');
+      assert.ok(calls.some(u => u.includes('process_paid_inventory')), '...and the inventory update was still attempted');
+    } finally { globalThis.fetch = originalFetch; }
+  });
+});
+
 test('duplicate tabby-verify calls for the same payment send byte-identical idempotency keys (no duplicate order/email/inventory)', async () => {
   await withEnv({ TABBY_MODE: 'test', TABBY_SECRET_KEY: 'sk_test_x', SUPABASE_URL: 'https://example.supabase.co', SUPABASE_SECRET_KEY: 'service_role_test', RESEND_API_KEY: 'resend_test' }, async () => {
     const originalFetch = globalThis.fetch;
