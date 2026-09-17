@@ -281,7 +281,9 @@ const handleTabbyVerify = async (req, res) => {
     return res.status(200).json({ paid: true, order_id: normalized.metadata.order_id });
   } catch (error) {
     if (error instanceof OrderValidationError) return res.status(error.status).json({ error: error.message });
-    return res.status(502).json({ error: 'تعذر التحقق من الدفع عبر Tabby' });
+    // TEMPORARY: surfacing the real cause to pin down the root cause behind
+    // a live persistence bug. Revert immediately after diagnosis.
+    return res.status(502).json({ error: 'تعذر التحقق من الدفع عبر Tabby', debug: error.message });
   }
 };
 
