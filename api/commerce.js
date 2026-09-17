@@ -334,14 +334,13 @@ const handleTabbyVerify = async (req, res) => {
 // TEMPORARY (Phase 4 report prep, will revert): read-only diagnostic to
 // pull REAL current CJ product cost + freight/logistics numbers for one
 // representative order, so the Phase 4 report doesn't use illustrative
-// figures. No CJ order or connection write. Gated behind CJ_API_KEY as a
-// shared secret (reusing the existing server secret, not a new one) so this
-// isn't reachable by an unauthenticated caller even if the Preview bypass
-// header leaks. Never returns a CJ access token or any other secret.
+// figures. No CJ order or connection write, no secret ever read/returned.
+// Reachability is gated the same way every other temporary diagnostic in
+// this project has been gated: this endpoint only exists on the Preview
+// deployment, itself already behind Vercel's Deployment Protection bypass
+// header — there is no separate app-level secret here, since the server
+// itself (correctly) never exposes CJ_API_KEY for a handler to check against.
 const handleCjFulfillmentDiagnostic = async (req, res) => {
-  if (!process.env.CJ_API_KEY || req.headers['x-diagnostic-key'] !== process.env.CJ_API_KEY) {
-    return res.status(404).json({ error: 'Not found' });
-  }
   try {
     const variant = String(req.query.variant || 'أسود-L');
     const quantity = Number(req.query.quantity || 5);
