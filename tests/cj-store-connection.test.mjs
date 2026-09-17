@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { AJLIB_VARIANT_KEYS, CJ_VARIANT_MAP, CJ_PRODUCT_FAMILY_PID, CJ_PRODUCT_FAMILY_SKU } from '../lib/cj-variant-map.js';
-import { buildSaveProductPayload, buildSaveVariantBatchPayload, buildCreateConnectionPayload, platformVariantId, AJLIB_PLATFORM_PRODUCT_ID, LOGISTICS_METHODS_COMMON_TO_ALL_SUPPORTED_DESTINATIONS } from '../lib/cj-store-connection.js';
+import { buildSaveProductPayload, buildSaveVariantBatchPayload, buildCreateConnectionPayload, platformVariantId, AJLIB_PLATFORM_PRODUCT_ID, LOGISTICS_METHODS_COMMON_TO_ALL_SUPPORTED_DESTINATIONS, RECOMMENDED_DEFAULT_LOGISTICS } from '../lib/cj-store-connection.js';
 import { serializeOrderForCustomer } from '../lib/fulfillment-status.js';
 
 // Phase 3: validates the exact payload shapes CJ's official docs specify for
@@ -122,4 +122,16 @@ test('Create Connection payload never includes a targetCountry/targetCountryCode
   const payload = buildCreateConnectionPayload({ defaultArea: 1, logistics: 'CJPacket Postal' });
   assert.equal('targetCountry' in payload, false);
   assert.equal('targetCountryCode' in payload, false);
+});
+
+test('recommended default logistics is DHL Official — the only method confirmed available at real AJLIB order quantities (5-50) across all 8 destinations', () => {
+  // CJPacket Postal was confirmed live to disappear at qty>=15 for every
+  // one of the 8 supported destinations (including Oman, where it drops to
+  // DHL-only) — so it is not a realistic connection-level default despite
+  // being common at qty<=10. This is not a guess: it reflects the live
+  // 8x5 freightCalculate matrix recorded in the Phase 3 report.
+  assert.equal(RECOMMENDED_DEFAULT_LOGISTICS, 'DHL Official');
+  assert.ok(LOGISTICS_METHODS_COMMON_TO_ALL_SUPPORTED_DESTINATIONS.includes(RECOMMENDED_DEFAULT_LOGISTICS));
+  const payload = buildCreateConnectionPayload({ defaultArea: 1, logistics: RECOMMENDED_DEFAULT_LOGISTICS });
+  assert.equal(payload.logistics, 'DHL Official');
 });
