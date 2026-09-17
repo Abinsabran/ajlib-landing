@@ -241,9 +241,10 @@ test('a known per-unit customization/sticker cost is included in the true variab
   const withExtra = evaluateFulfillmentMargin({
     productAmountCollectedFils: 11900, shippingAmountCollectedFils: 0,
     cjProductCostUSD: 11.05, cjShippingCostUSD: 10.52, unitCount: 5,
-    customizationCostPerUnitUSD: 1 // $1/unit x 5 units
+    customizationCostPerUnitUSD: 1 // $1/unit x 5 units, vs the $0.02/unit default
   });
-  assert.ok(Math.abs((withExtra.details.fulfillmentCostUSD - base.details.fulfillmentCostUSD) - 5) < 1e-9);
+  const expectedDelta = (1 - 0.02) * 5;
+  assert.ok(Math.abs((withExtra.details.fulfillmentCostUSD - base.details.fulfillmentCostUSD) - expectedDelta) < 1e-9);
   assert.ok(withExtra.details.marginPercent < base.details.marginPercent);
 });
 
@@ -722,16 +723,15 @@ test('Stripe fee follows the published UAE card rate (2.9% + AED 1.00), with the
   assert.ok(international > domestic);
 });
 
-test('a Tabby order cannot be margin-approved while its negotiated rate is unconfigured', () => {
-  // TABBY_FEE_PERCENT is intentionally null until the real rate is supplied.
-  assert.equal(paymentFeeUSD({ amountCollectedFils: 11900, provider: 'tabby' }), null);
-  const verdict = evaluateFulfillmentMargin({
-    productAmountCollectedFils: 11900, shippingAmountCollectedFils: 0,
-    cjProductCostUSD: 11.05, cjShippingCostUSD: 10.52, unitCount: 5, provider: 'tabby'
-  });
-  assert.equal(verdict.approved, false);
-  assert.equal(verdict.reason, 'PAYMENT_FEE_NOT_CONFIGURED');
-  assert.equal(verdict.band, 'BLOCK');
+test('the unknown-payment-fee guard still exists, so an unconfigured rate could never be silently scored', async () => {
+  // Tabby's UAE rate is now CONFIRMED (6.99% + AED 1.50), so this no longer
+  // fires in practice — see tests/pricing-economics.test.mjs. The guard must
+  // remain for any future provider whose rate is not yet known: an unknown
+  // fee means the true cost is unknown, which must block rather than be
+  // scored with a guessed number.
+  const source = await readFile(new URL('../lib/cj-fulfillment.js', import.meta.url), 'utf8');
+  assert.ok(source.includes('PAYMENT_FEE_NOT_CONFIGURED'), 'the unknown-fee guard must not be deleted');
+  assert.ok(/if \(feeUSD == null\)/.test(source), 'the null-fee branch must remain');
 });
 
 test('CJ platformPrice is still never part of the true variable cost', () => {
@@ -745,7 +745,7 @@ test('CJ platformPrice is still never part of the true variable cost', () => {
 // ---- REVERSE PRICING SOLVER --------------------------------------------------
 
 test('minimumRevenueAedForMargin solves for a price that actually yields the target margin', () => {
-  const nonPayment = 11.05 + 13.25; // product + freight, USD
+  const nonPayment = 11.05 + 13.25 + (0.02 * 5); // product + freight + sticker, USD
   for (const target of [20, 25, 30]) {
     const priceAed = minimumRevenueAedForMargin({ targetMarginPercent: target, nonPaymentVariableCostUSD: nonPayment });
     assert.ok(priceAed > 0);
