@@ -5,8 +5,6 @@ import { COUNTRY_CURRENCY, currencyForCountry, convertAedFilsForDisplay } from '
 import { isTabbyPotentiallyAvailable, createCheckoutSession, verifyPayment } from '../lib/tabby-client.js';
 import { buildValidatedOrder, OrderValidationError } from '../lib/order-validation.js';
 import { persistPaidOrder } from './stripe-webhook.js';
-import { resolveFulfillmentVariants, resolveFreightAndLogistics, evaluateFulfillmentMargin, minimumRevenueAedForMargin } from '../lib/cj-fulfillment.js';
-import { maxAgingDays, DELIVERY_PROMISE_MAX_DAYS } from '../lib/logistics-policy.js';
 
 // Grouped, provider-neutral handler for the foundation endpoints added
 // alongside the existing per-feature functions (checkout-session.js,
@@ -335,59 +333,7 @@ const handleTabbyVerify = async (req, res) => {
 // saveStoreProduct/saveStoreVariantBatch/createProductConnection/
 // queryProductConnections remain available for any future re-sync need.
 
-// TEMPORARY (margin-band pricing analysis, removed this round): read-only.
-// Live CJ freight for each real AJLIB quantity tier, scored against the
-// approved margin band using TRUE variable cost. No CJ write, no DDL.
-const handleMarginAnalysis = async (req, res) => {
-  const out = [];
-  for (const quantity of [5, 10, 15, 20, 50]) {
-    try {
-      const { resolved } = resolveFulfillmentVariants([{ variant: 'أسود-L', quantity }]);
-      const { availableMethods } = await resolveFreightAndLogistics({ resolvedItems: resolved, destinationCountryCode: 'AE' });
-      const { productAmount } = computeProductPricing(quantity);
-      const shipping = await quoteShipping('AE');
-      const revenueFils = productAmount + shipping.amount;
-      const cjProductCostUSD = 2.21 * quantity;
-
-      const scored = availableMethods.map(m => {
-        const cost = Number(m.totalPostageFee ?? m.logisticPrice);
-        const margin = evaluateFulfillmentMargin({
-          productAmountCollectedFils: productAmount, shippingAmountCollectedFils: shipping.amount,
-          cjProductCostUSD, cjShippingCostUSD: cost, unitCount: quantity, provider: 'stripe'
-        });
-        return {
-          name: m.logisticName, cost, aging: m.logisticAging ?? null, agingMax: maxAgingDays(m),
-          marginPercent: Number(margin.details.marginPercent?.toFixed(2)),
-          band: margin.band, totalVariableCostUSD: Number(margin.details.fulfillmentCostUSD?.toFixed(4)),
-          paymentFeeUSD: Number(margin.details.breakdown?.paymentFeeUSD?.toFixed(4))
-        };
-      });
-
-      const eligible = scored.filter(s => s.agingMax != null && s.agingMax <= DELIVERY_PROMISE_MAX_DAYS);
-      const best = [...eligible].sort((a, b) => a.cost - b.cost)[0] || null;
-      const nonPaymentUSD = best ? cjProductCostUSD + best.cost : null;
-
-      out.push({
-        quantity,
-        revenueAed: revenueFils / 100,
-        revenueUSD: Number(((revenueFils / 100) * 0.2723).toFixed(4)),
-        cjProductCostUSD,
-        allMethods: scored,
-        eligibleWithinPromise: eligible.map(e => e.name),
-        selected: best,
-        minPriceAed: best ? {
-          p20: Number(minimumRevenueAedForMargin({ targetMarginPercent: 20, nonPaymentVariableCostUSD: nonPaymentUSD })?.toFixed(2)),
-          p25: Number(minimumRevenueAedForMargin({ targetMarginPercent: 25, nonPaymentVariableCostUSD: nonPaymentUSD })?.toFixed(2)),
-          p30: Number(minimumRevenueAedForMargin({ targetMarginPercent: 30, nonPaymentVariableCostUSD: nonPaymentUSD })?.toFixed(2))
-        } : null
-      });
-    } catch (error) { out.push({ quantity, error: error.reason || error.message, details: error.details ?? null }); }
-  }
-  return res.status(200).json({ promiseMaxDays: DELIVERY_PROMISE_MAX_DAYS, tiers: out });
-};
-
 const HANDLERS = {
-  'margin-analysis': handleMarginAnalysis,
   'order-quote': handleOrderQuote,
   catalog: handleCatalog,
   currency: handleCurrency,
