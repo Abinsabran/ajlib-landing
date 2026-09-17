@@ -5,7 +5,6 @@ import { COUNTRY_CURRENCY, currencyForCountry, convertAedFilsForDisplay } from '
 import { isTabbyPotentiallyAvailable, createCheckoutSession, verifyPayment } from '../lib/tabby-client.js';
 import { buildValidatedOrder, OrderValidationError } from '../lib/order-validation.js';
 import { persistPaidOrder } from './stripe-webhook.js';
-import { getCurrentCjProductCosts, resolveFreightAndLogistics, resolveFulfillmentVariants } from '../lib/cj-fulfillment.js';
 
 // Grouped, provider-neutral handler for the foundation endpoints added
 // alongside the existing per-feature functions (checkout-session.js,
@@ -331,45 +330,13 @@ const handleTabbyVerify = async (req, res) => {
 // saveStoreProduct/saveStoreVariantBatch/createProductConnection/
 // queryProductConnections remain available for any future re-sync need.
 
-// TEMPORARY (Phase 4 report prep, will revert): read-only diagnostic to
-// pull REAL current CJ product cost + freight/logistics numbers for one
-// representative order, so the Phase 4 report doesn't use illustrative
-// figures. No CJ order or connection write, no secret ever read/returned.
-// Reachability is gated the same way every other temporary diagnostic in
-// this project has been gated: this endpoint only exists on the Preview
-// deployment, itself already behind Vercel's Deployment Protection bypass
-// header — there is no separate app-level secret here, since the server
-// itself (correctly) never exposes CJ_API_KEY for a handler to check against.
-const handleCjFulfillmentDiagnostic = async (req, res) => {
-  try {
-    const variant = String(req.query.variant || 'أسود-L');
-    const quantity = Number(req.query.quantity || 5);
-    const countryCode = String(req.query.country || 'AE');
-    const { resolved, fullyResolved } = resolveFulfillmentVariants([{ variant, quantity }]);
-    if (!fullyResolved) return res.status(400).json({ error: 'Unresolved variant', variant });
-    const costed = await getCurrentCjProductCosts(resolved);
-    const { availableMethods, selection } = await resolveFreightAndLogistics({ resolvedItems: resolved, destinationCountryCode: countryCode });
-    return res.status(200).json({
-      variant, quantity, countryCode,
-      cjVariantId: resolved[0].cjVariantId,
-      unitCostUSD: costed[0].unitCostUSD,
-      lineCostUSD: costed[0].lineCostUSD,
-      availableMethods: availableMethods.map(m => ({ logisticName: m.logisticName, cost: Number(m.totalPostageFee ?? m.logisticPrice) })),
-      selection
-    });
-  } catch (error) {
-    return res.status(500).json({ error: error.message });
-  }
-};
-
 const HANDLERS = {
   'order-quote': handleOrderQuote,
   catalog: handleCatalog,
   currency: handleCurrency,
   'tabby-availability': handleTabbyAvailability,
   'tabby-checkout': handleTabbyCheckout,
-  'tabby-verify': handleTabbyVerify,
-  'cj-fulfillment-diagnostic': handleCjFulfillmentDiagnostic
+  'tabby-verify': handleTabbyVerify
 };
 
 export default async function handler(req, res) {
