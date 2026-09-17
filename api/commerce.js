@@ -5,7 +5,6 @@ import { COUNTRY_CURRENCY, currencyForCountry, convertAedFilsForDisplay } from '
 import { isTabbyPotentiallyAvailable, createCheckoutSession, verifyPayment } from '../lib/tabby-client.js';
 import { buildValidatedOrder, OrderValidationError } from '../lib/order-validation.js';
 import { persistPaidOrder } from './stripe-webhook.js';
-import { getAccountBalance } from '../lib/cj-client.js';
 
 // Grouped, provider-neutral handler for the foundation endpoints added
 // alongside the existing per-feature functions (checkout-session.js,
@@ -334,20 +333,7 @@ const handleTabbyVerify = async (req, res) => {
 // saveStoreProduct/saveStoreVariantBatch/createProductConnection/
 // queryProductConnections remain available for any future re-sync need.
 
-// TEMPORARY (confirm real CJ balance response shape, removed this round):
-// read-only. Echoes the raw `data` so the exact available/frozen/
-// non-withdrawable field names can be confirmed instead of assumed.
-const handleBalanceProbe = async (req, res) => {
-  const balance = await getAccountBalance();
-  return res.status(200).json({
-    status: balance.status, code: balance.body?.code, message: balance.body?.message ?? null,
-    result: balance.body?.result ?? null,
-    dataKeys: Object.keys(balance.body?.data ?? {}), data: balance.body?.data ?? null
-  });
-};
-
 const HANDLERS = {
-  'balance-probe': handleBalanceProbe,
   'order-quote': handleOrderQuote,
   catalog: handleCatalog,
   currency: handleCurrency,

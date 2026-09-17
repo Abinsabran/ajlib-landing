@@ -289,7 +289,8 @@ test('prepareFulfillment blocks with INSUFFICIENT_CJ_BALANCE before building any
       if (u.includes('getAccessToken')) return { ok: true, json: async () => ({ data: { accessToken: 'tok', accessTokenExpiryDate: new Date(Date.now() + 3600_000).toISOString() } }) };
       if (u.includes('/product/conn/connection')) return { ok: true, json: async () => ({ data: { list: [{ cjVariantId: '1581871544320667650', cjPrice: '2.21' }] } }) };
       if (u.includes('/logistic/freightCalculate')) return { ok: true, json: async () => ({ data: [{ logisticName: 'CJPacket Eub', logisticPrice: 10.52, totalPostageFee: 10.52, logisticAging: '7-12' }] }) };
-      if (u.includes('/shopping/balance/getBalance')) return { ok: true, json: async () => ({ data: { balance: 1.00 } }) };
+      // Real CJ shape: available balance is `amount`, in a success envelope.
+      if (u.includes('/shopping/pay/getBalance')) return { ok: true, json: async () => ({ code: 200, result: true, data: { amount: 1.00, freezeAmount: 0, noWithdrawalAmount: 0 } }) };
       throw new Error(`unexpected fetch: ${u}`);
     };
     try {
@@ -310,7 +311,8 @@ test('the CJ wallet is never spent directly — no payBalance endpoint exists an
   // what must not exist is an actual request built against one.
   const code = clientSource.replace(/\/\/[^\n]*/g, '');
   assert.ok(!/payBalance/.test(code), 'payBalance/payBalanceV2 must never be called from this codebase');
-  assert.ok(code.includes('balance/getBalance'), 'read-only balance query should be present');
+  // Path corrected per CJ support — see tests/cj-balance-timeout.test.mjs.
+  assert.ok(code.includes('pay/getBalance'), 'read-only balance query should be present');
 });
 
 // ---- IDEMPOTENCY ---------------------------------------------------------------
