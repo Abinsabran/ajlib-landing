@@ -132,13 +132,11 @@ test('tabby-verify persists the order only once amount and status both check out
 });
 
 test('THE BUG: tabby-verify must NOT report paid:true when the order upsert reports success but returns no row', async () => {
-  // Reproduces the exact real-world failure: Preview's /api/tabby-verify
-  // returned 200 {paid:true,...} for a real completed Tabby sandbox
-  // payment, but no row existed in Supabase afterward. Root cause: saveOrder
-  // used Prefer: return=minimal, so a 2xx status was trusted as proof of
-  // persistence when it proved nothing. This test fails on the pre-fix code
-  // (which returned 200 here) and passes only because saveOrder now demands
-  // an actual returned row.
+  // Reproduces the general shape of the real-world failure: any 2xx from
+  // the orders upsert with an empty representation must not be trusted as
+  // persistence. (The CONFIRMED live root cause turned out to be simpler —
+  // see the next test — but this covers other silent-no-op shapes too, e.g.
+  // an RLS-restricted read-back.)
   await withEnv({ TABBY_MODE: 'test', TABBY_SECRET_KEY: 'sk_test_x', SUPABASE_URL: 'https://example.supabase.co', SUPABASE_SECRET_KEY: 'restricted_key_test', RESEND_API_KEY: 'resend_test' }, async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = async (url) => {
@@ -157,6 +155,34 @@ test('THE BUG: tabby-verify must NOT report paid:true when the order upsert repo
       const res = await handler({ method: 'POST', query: { resource: 'tabby-verify' }, body: { payment_id: 'pay_norow_1', order: validOrder({ id: 'AJ-TABBY-NOROW-1' }) }, headers: {} }, makeRes());
       assert.notEqual(res.statusCode, 200, 'must not report success when no row was actually persisted');
       assert.equal(res.body.paid, undefined);
+    } finally { globalThis.fetch = originalFetch; }
+  });
+});
+
+test('CONFIRMED LIVE ROOT CAUSE: missing SUPABASE_SECRET_KEY silently no-ops saveOrder — must not report paid:true', async () => {
+  // Confirmed against live Preview via a boolean-only env-presence check
+  // (no secret value ever read/exposed): SUPABASE_SECRET_KEY was never
+  // added to Preview. saveOrder()/updateInventory() both silently return
+  // via their existing `if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) return;`
+  // guard — no fetch attempted, no error thrown — while sendOrderEmail()
+  // (no such guard) succeeds independently. The pre-fix code took
+  // Promise.all resolving cleanly as proof of persistence; it proved
+  // nothing. No fetch to /rest/v1/orders should even happen here.
+  await withEnv({ TABBY_MODE: 'test', TABBY_SECRET_KEY: 'sk_test_x', SUPABASE_URL: 'https://example.supabase.co', SUPABASE_SECRET_KEY: '', RESEND_API_KEY: 'resend_test' }, async () => {
+    const originalFetch = globalThis.fetch;
+    const calls = [];
+    globalThis.fetch = async (url) => {
+      calls.push(String(url));
+      if (String(url).includes('/payments/')) return { ok: true, json: async () => ({ id: 'pay_nokey_1', status: 'CLOSED', amount: '119.00', currency: 'AED' }) };
+      if (String(url).includes('api.resend.com')) return { ok: true, json: async () => ({ id: 'email_1' }) };
+      if (String(url).includes('/rest/v1/shipping_zones')) return { ok: false };
+      throw new Error(`unexpected fetch in test: ${url}`);
+    };
+    try {
+      const res = await handler({ method: 'POST', query: { resource: 'tabby-verify' }, body: { payment_id: 'pay_nokey_1', order: validOrder({ id: 'AJ-TABBY-NOKEY-1' }) }, headers: {} }, makeRes());
+      assert.notEqual(res.statusCode, 200);
+      assert.equal(res.body.paid, undefined);
+      assert.ok(!calls.some(u => u.includes('/rest/v1/orders')), 'no order upsert should even be attempted without the key');
     } finally { globalThis.fetch = originalFetch; }
   });
 });
