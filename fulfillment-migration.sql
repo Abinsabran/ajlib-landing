@@ -2,10 +2,15 @@
 --
 -- SAFETY REVIEW (per the approval criteria): every statement below is
 -- strictly additive and idempotent — ADD COLUMN IF NOT EXISTS,
--- CREATE INDEX IF NOT EXISTS, CREATE TABLE IF NOT EXISTS, COMMENT ON.
--- There is no DROP, no destructive or type-changing ALTER, no rename, no
--- removal, and no statement that deletes or rewrites existing order data.
--- Re-running it is a no-op.
+-- CREATE INDEX IF NOT EXISTS, CREATE TABLE IF NOT EXISTS, COMMENT ON, plus
+-- RLS hardening on the one NEW table. There is no DROP, no destructive or
+-- type-changing ALTER, no rename, no removal, and no statement that deletes
+-- or rewrites existing order data. Re-running it is a no-op.
+--
+-- One nuance worth stating plainly: fulfillment_retry_count is added as
+-- NOT NULL DEFAULT 0. On PostgreSQL 11+ (Supabase is well past that) this
+-- stores the default in the catalogue rather than rewriting the table, so
+-- existing rows simply read as 0. No existing value is altered or lost.
 --
 -- IMPORTANT: unlike Vercel Preview vs Production (separate deployments),
 -- there is only ONE Supabase project/database referenced throughout this
@@ -69,5 +74,16 @@ create table if not exists public.cj_webhook_events (
   topic text not null,
   received_at timestamptz not null default now()
 );
+
+-- A new table in `public` is reachable through PostgREST by default, so
+-- without this the anon key could read CJ event metadata and — worse —
+-- INSERT arbitrary message_ids, which would make the receiver treat real
+-- CJ webhooks as already-processed duplicates and silently drop them.
+-- Enabling RLS with NO policies denies everyone; the server reaches this
+-- table with the service role, which bypasses RLS. Matches how
+-- supabase-schema.sql already protects public.orders and public.profiles.
+alter table public.cj_webhook_events enable row level security;
+revoke all on table public.cj_webhook_events from anon;
+revoke all on table public.cj_webhook_events from authenticated;
 
 commit;
