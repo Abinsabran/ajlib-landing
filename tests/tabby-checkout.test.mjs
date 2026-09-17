@@ -51,7 +51,9 @@ test('tabby-checkout uses the server-authoritative quote, not any client-submitt
     let capturedBody = null;
     globalThis.fetch = async (url, options) => {
       capturedBody = JSON.parse(options.body);
-      return { ok: true, json: async () => ({ id: 'pay_test_1', status: 'created', configuration: { available_products: { installments: [{ web_url: 'https://checkout.tabby.ai/x' }] } } }) };
+      // Real Tabby shape (confirmed against a live sandbox session): the
+      // top-level session id and payment.id are DIFFERENT values.
+      return { ok: true, json: async () => ({ id: 'session_test_1', status: 'created', payment: { id: 'payment_test_1' }, configuration: { available_products: { installments: [{ web_url: 'https://checkout.tabby.ai/x' }] } } }) };
     };
     try {
       // Client tries to claim a tiny amount — order-validation.js recomputes
@@ -60,6 +62,22 @@ test('tabby-checkout uses the server-authoritative quote, not any client-submitt
       const res = await handler({ method: 'POST', query: { resource: 'tabby-checkout' }, body: order, headers: {} }, makeRes());
       assert.equal(res.statusCode, 200);
       assert.equal(capturedBody.payment.amount, '119.00'); // 5 x 23.80 AED, the real tiered price
+    } finally { globalThis.fetch = originalFetch; }
+  });
+});
+
+test('tabby-checkout returns the nested payment.id, not the top-level session id, as paymentId', async () => {
+  // Regression test: a live Preview sandbox run showed these are DIFFERENT
+  // Tabby ids. Returning the session id here silently breaks verification
+  // (GET /payments/{id} 404s with "no such payment").
+  await withEnv({ TABBY_MODE: 'test', TABBY_SECRET_KEY: 'sk_test_x', TABBY_PUBLIC_KEY: 'pk_test_x' }, async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => ({ ok: true, json: async () => ({ id: 'session_test_2', status: 'created', payment: { id: 'payment_test_2' }, configuration: { available_products: { installments: [{ web_url: 'https://checkout.tabby.ai/x' }] } } }) });
+    try {
+      const res = await handler({ method: 'POST', query: { resource: 'tabby-checkout' }, body: validOrder(), headers: {} }, makeRes());
+      assert.equal(res.statusCode, 200);
+      assert.equal(res.body.paymentId, 'payment_test_2');
+      assert.notEqual(res.body.paymentId, 'session_test_2');
     } finally { globalThis.fetch = originalFetch; }
   });
 });
@@ -105,6 +123,62 @@ test('tabby-verify persists the order only once amount and status both check out
       const res = await handler({ method: 'POST', query: { resource: 'tabby-verify' }, body: { payment_id: 'pay_test_1', order: validOrder() }, headers: {} }, makeRes());
       assert.equal(res.statusCode, 200);
       assert.equal(res.body.paid, true);
+    } finally { globalThis.fetch = originalFetch; }
+  });
+});
+
+test('tabby-verify treats an EXPIRED session (real sandbox-observed status) as not paid', async () => {
+  // A live Preview sandbox session that was never completed within its
+  // window came back with status: "EXPIRED" when re-verified — confirmed
+  // real, not assumed. Must be refused exactly like REJECTED, not persisted.
+  await withEnv({ TABBY_MODE: 'test', TABBY_SECRET_KEY: 'sk_test_x' }, async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => ({ ok: true, json: async () => ({ id: 'pay_test_1', status: 'EXPIRED', amount: '119.00', currency: 'AED' }) });
+    try {
+      const res = await handler({ method: 'POST', query: { resource: 'tabby-verify' }, body: { payment_id: 'pay_test_1', order: validOrder() }, headers: {} }, makeRes());
+      assert.equal(res.statusCode, 402);
+      assert.equal(res.body.status, 'EXPIRED');
+    } finally { globalThis.fetch = originalFetch; }
+  });
+});
+
+test('duplicate tabby-verify calls for the same payment send byte-identical idempotency keys (no duplicate order/email/inventory)', async () => {
+  await withEnv({ TABBY_MODE: 'test', TABBY_SECRET_KEY: 'sk_test_x', SUPABASE_URL: 'https://example.supabase.co', SUPABASE_SECRET_KEY: 'service_role_test', RESEND_API_KEY: 'resend_test' }, async () => {
+    const originalFetch = globalThis.fetch;
+    const calls = [];
+    globalThis.fetch = async (url, options = {}) => {
+      calls.push({ url: String(url), options });
+      if (String(url).includes('/payments/')) return { ok: true, json: async () => ({ id: 'pay_dup_1', status: 'CLOSED', amount: '119.00', currency: 'AED' }) };
+      if (String(url).includes('api.resend.com')) return { ok: true, json: async () => ({ id: 'email_1' }) };
+      if (String(url).includes('/rest/v1/orders')) return { ok: true, text: async () => '' };
+      if (String(url).includes('/rpc/process_paid_inventory')) return { ok: true, json: async () => ({}) };
+      if (String(url).includes('/rpc/check_inventory')) return { ok: true, json: async () => ([]) };
+      if (String(url).includes('/rest/v1/shipping_zones')) return { ok: false }; // forces shipping-quote.js's own fallbackZones, no live rule change
+      throw new Error(`unexpected fetch in test: ${url}`);
+    };
+    try {
+      const body = { payment_id: 'pay_dup_1', order: validOrder({ id: 'AJ-TABBY-DUP-1' }) };
+      const res1 = await handler({ method: 'POST', query: { resource: 'tabby-verify' }, body, headers: {} }, makeRes());
+      const res2 = await handler({ method: 'POST', query: { resource: 'tabby-verify' }, body, headers: {} }, makeRes());
+      assert.equal(res1.statusCode, 200);
+      assert.equal(res2.statusCode, 200);
+
+      const orderCalls = calls.filter(c => c.url.includes('/rest/v1/orders') && !c.url.includes('rpc'));
+      const emailCalls = calls.filter(c => c.url.includes('api.resend.com'));
+      const inventoryCalls = calls.filter(c => c.url.includes('process_paid_inventory'));
+
+      assert.equal(orderCalls.length, 2, 'one upsert attempt per verify call');
+      const bodies = orderCalls.map(c => JSON.parse(c.options.body));
+      assert.equal(bodies[0].stripe_session_id, 'tabby_pay_dup_1');
+      assert.equal(bodies[0].stripe_session_id, bodies[1].stripe_session_id);
+      assert.equal(orderCalls[0].options.headers.Prefer, 'resolution=merge-duplicates,return=minimal');
+
+      assert.equal(emailCalls.length, 2);
+      assert.equal(emailCalls[0].options.headers['Idempotency-Key'], emailCalls[1].options.headers['Idempotency-Key']);
+
+      assert.equal(inventoryCalls.length, 2);
+      const invBodies = inventoryCalls.map(c => JSON.parse(c.options.body));
+      assert.equal(invBodies[0].session_id, invBodies[1].session_id);
     } finally { globalThis.fetch = originalFetch; }
   });
 });

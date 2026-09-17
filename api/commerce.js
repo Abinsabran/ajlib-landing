@@ -2,7 +2,7 @@ import { quoteShipping } from './shipping-quote.js';
 import { computeProductPricing, MIN_QUANTITY, MAX_QUANTITY } from '../lib/pricing.js';
 import { PRODUCTS } from '../lib/catalog.js';
 import { COUNTRY_CURRENCY, currencyForCountry, convertAedFilsForDisplay } from '../lib/currency.js';
-import { isTabbyPotentiallyAvailable, createCheckoutSession, verifyPayment, tabbyRawGet } from '../lib/tabby-client.js';
+import { isTabbyPotentiallyAvailable, createCheckoutSession, verifyPayment } from '../lib/tabby-client.js';
 import { buildValidatedOrder, OrderValidationError } from '../lib/order-validation.js';
 import { persistPaidOrder } from './stripe-webhook.js';
 
@@ -205,7 +205,11 @@ const handleTabbyCheckout = async (req, res) => {
     const webUrl = session?.configuration?.available_products?.installments?.[0]?.web_url || null;
     if (!webUrl) return res.status(200).json({ provider: 'tabby', available: false, reason: 'NO_CHECKOUT_URL' });
 
-    return res.status(200).json({ provider: 'tabby', available: true, paymentId: session.id, checkoutUrl: webUrl, status: session.status });
+    // session.id is the checkout/session id; session.payment.id is the
+    // distinct payment id required by GET /payments/{id} for verification
+    // (confirmed against a real Preview sandbox session — they are NOT the
+    // same value). Returning the wrong one silently breaks verification.
+    return res.status(200).json({ provider: 'tabby', available: true, paymentId: session.payment?.id, checkoutUrl: webUrl, status: session.status });
   } catch (error) {
     if (error instanceof OrderValidationError) return res.status(error.status).json({ error: error.message });
     return res.status(502).json({ error: 'تعذر بدء الدفع عبر Tabby' });
@@ -275,21 +279,12 @@ const handleTabbyVerify = async (req, res) => {
   }
 };
 
-// cj-diagnostic and tabby-diagnostic (used to confirm CJ's real variant data
-// and Tabby's real sandbox response shape during Phase 2) have been removed
-// now that both are confirmed — see lib/cj-variant-map.js for the resulting
-// data and the Phase 2 report for the raw Tabby sandbox response. rawCjGet
-// and tabbyDiagnosticPost remain in lib/ for any future re-sync need.
-
-const handleTabbyVerifyDiagnostic = async (req, res) => {
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
-  try {
-    const result = await tabbyRawGet(`/payments/${encodeURIComponent(String(req.query.payment_id || ''))}`);
-    return res.status(200).json(result);
-  } catch (error) {
-    return res.status(502).json({ error: error.message });
-  }
-};
+// cj-diagnostic, tabby-diagnostic and tabby-verify-diagnostic (used to
+// confirm CJ's real variant data and Tabby's real sandbox request/response
+// shapes during Phase 2 — including catching that session.id and
+// session.payment.id are different values) have all been removed now that
+// they've served their purpose. rawCjGet/tabbyDiagnosticPost/tabbyRawGet
+// remain in lib/ for any future re-sync need.
 
 const HANDLERS = {
   'order-quote': handleOrderQuote,
@@ -297,8 +292,7 @@ const HANDLERS = {
   currency: handleCurrency,
   'tabby-availability': handleTabbyAvailability,
   'tabby-checkout': handleTabbyCheckout,
-  'tabby-verify': handleTabbyVerify,
-  'tabby-verify-diagnostic': handleTabbyVerifyDiagnostic
+  'tabby-verify': handleTabbyVerify
 };
 
 export default async function handler(req, res) {
