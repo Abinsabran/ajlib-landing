@@ -292,7 +292,7 @@ test('prepareFulfillment blocks with INSUFFICIENT_CJ_BALANCE before building any
         () => prepareFulfillment({
           order_number: 'AJ-BAL-1', items: [{ variant: 'أسود-L', quantity: 5 }],
           shipping_city: 'دبي', shipping_country_code: 'AE', product_amount: 11900, shipping_amount: 0
-        }),
+        }, { maxDeliveryDays: 50 }),
         (err) => err instanceof FulfillmentBlockedError && err.reason === 'INSUFFICIENT_CJ_BALANCE'
       );
     } finally { globalThis.fetch = originalFetch; }
@@ -618,4 +618,41 @@ test('CJ\'s real "Interface not found" balance response blocks fulfillment inste
   const verdict = evaluateBalanceSufficiency({ balanceUSD: parseCjBalanceUSD(realResponse), requiredUSD: 21.57 });
   assert.equal(verdict.sufficient, false);
   assert.equal(verdict.reason, 'CJ_BALANCE_UNAVAILABLE');
+});
+
+test('prepareFulfillment refuses to run without an explicit delivery promise (an absent promise is not "any speed")', async () => {
+  // Live AE data: the cheapest route is CJPacket Eub with 12-50 day aging,
+  // so an unconstrained "cheapest" would auto-select a possibly 50-day
+  // shipment against a 1-3 day published promise.
+  await assert.rejects(
+    () => prepareFulfillment({
+      order_number: 'AJ-NOPROMISE', items: [{ variant: 'أسود-L', quantity: 5 }],
+      shipping_city: 'دبي', shipping_country_code: 'AE', product_amount: 11900, shipping_amount: 0
+    }),
+    (err) => err instanceof FulfillmentBlockedError && err.reason === 'DELIVERY_PROMISE_NOT_CONFIGURED'
+  );
+});
+
+test('with AE\'s real published promise (max 3 days) no live CJ route qualifies — fulfillment blocks rather than over-promising', () => {
+  // Exactly the live AE qty-5 method set, including real aging strings.
+  const liveAeMethods = [
+    { logisticName: 'CJPacket Eub', totalPostageFee: 10.52, logisticAging: '12-50' },
+    { logisticName: 'CJPacket Eub Special Line', totalPostageFee: 12.46, logisticAging: '8-15' },
+    { logisticName: 'CJPacket Liquid Line', totalPostageFee: 13.25, logisticAging: '7-10' },
+    { logisticName: 'CJPacket Ordinary', totalPostageFee: 16.19, logisticAging: '7-11' },
+    { logisticName: 'CJPacket Sensitive', totalPostageFee: 16.85, logisticAging: '7-11' },
+    { logisticName: 'CJPacket Postal', totalPostageFee: 17.96, logisticAging: '12-50' },
+    { logisticName: 'PostNL', totalPostageFee: 32.61, logisticAging: '15-45' },
+    { logisticName: 'DHL Official', totalPostageFee: 118.44, logisticAging: '3-5' }
+  ];
+  const strict = selectLogisticsMethod(liveAeMethods, { countryCode: 'AE', maxDeliveryDays: 3 });
+  assert.equal(strict.method, null);
+  assert.equal(strict.reason, 'NO_METHOD_MEETS_DELIVERY_PROMISE');
+
+  // If the promise were extended to 10 days, CJPacket Liquid Line becomes
+  // the cheapest qualifying route — recorded here so the effect of that
+  // (unapproved) commercial change is explicit rather than assumed.
+  const relaxed = selectLogisticsMethod(liveAeMethods, { countryCode: 'AE', maxDeliveryDays: 10 });
+  assert.equal(relaxed.method, 'CJPacket Liquid Line');
+  assert.equal(relaxed.cost, 13.25);
 });

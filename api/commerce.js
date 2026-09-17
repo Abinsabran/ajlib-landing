@@ -5,8 +5,6 @@ import { COUNTRY_CURRENCY, currencyForCountry, convertAedFilsForDisplay } from '
 import { isTabbyPotentiallyAvailable, createCheckoutSession, verifyPayment } from '../lib/tabby-client.js';
 import { buildValidatedOrder, OrderValidationError } from '../lib/order-validation.js';
 import { persistPaidOrder } from './stripe-webhook.js';
-import { resolveFulfillmentVariants, resolveFreightAndLogistics, parseCjBalanceUSD } from '../lib/cj-fulfillment.js';
-import { getAccountBalance } from '../lib/cj-client.js';
 
 // Grouped, provider-neutral handler for the foundation endpoints added
 // alongside the existing per-feature functions (checkout-session.js,
@@ -335,56 +333,7 @@ const handleTabbyVerify = async (req, res) => {
 // saveStoreProduct/saveStoreVariantBatch/createProductConnection/
 // queryProductConnections remain available for any future re-sync need.
 
-// TEMPORARY (Phase 4 final prep, will be removed this round): read-only.
-// Reports (a) CJ wallet balance, (b) real freight incl. delivery aging for
-// representative orders, (c) which fulfillment columns currently exist.
-// No CJ write, no DDL, no secret returned — only booleans/numbers.
-const handleFulfillmentPreflight = async (req, res) => {
-  const out = {};
-  try {
-    const balance = await getAccountBalance();
-    // Field names are echoed so the real response shape can be confirmed
-    // rather than assumed; CJ's docs do not publish them.
-    out.balance = { status: balance.status, code: balance.body?.code, message: balance.body?.message ?? null, result: balance.body?.result ?? null, dataKeys: Object.keys(balance.body?.data ?? {}), data: balance.body?.data ?? null, parsedUSD: parseCjBalanceUSD(balance.body) };
-  } catch (error) { out.balance = { error: error.message }; }
-
-  out.freight = [];
-  for (const quantity of [5, 10]) {
-    try {
-      const { resolved } = resolveFulfillmentVariants([{ variant: 'أسود-L', quantity }]);
-      const { availableMethods, selection, raw } = await resolveFreightAndLogistics({ resolvedItems: resolved, destinationCountryCode: 'AE' });
-      out.freight.push({
-        quantity,
-        methods: availableMethods.map(m => ({ name: m.logisticName, cost: Number(m.totalPostageFee ?? m.logisticPrice), aging: m.logisticAging ?? null })),
-        selection,
-        rawCode: raw?.body?.code ?? null,
-        rawMessage: raw?.body?.message ?? null
-      });
-    } catch (error) { out.freight.push({ quantity, error: error.message }); }
-  }
-
-  // Column existence probe: PostgREST errors naming the column when absent.
-  out.schema = {};
-  for (const column of ['shipping_city', 'fulfillment_external_order_id', 'fulfillment_status', 'fulfillment_retry_count']) {
-    try {
-      const probe = await fetch(`${process.env.SUPABASE_URL}/rest/v1/orders?select=${column}&limit=1`, {
-        headers: { apikey: process.env.SUPABASE_SECRET_KEY, Authorization: `Bearer ${process.env.SUPABASE_SECRET_KEY}` }
-      });
-      out.schema[column] = probe.ok;
-    } catch { out.schema[column] = false; }
-  }
-  try {
-    const probe = await fetch(`${process.env.SUPABASE_URL}/rest/v1/cj_webhook_events?select=message_id&limit=1`, {
-      headers: { apikey: process.env.SUPABASE_SECRET_KEY, Authorization: `Bearer ${process.env.SUPABASE_SECRET_KEY}` }
-    });
-    out.schema.cj_webhook_events_table = probe.ok;
-  } catch { out.schema.cj_webhook_events_table = false; }
-
-  return res.status(200).json(out);
-};
-
 const HANDLERS = {
-  'fulfillment-preflight': handleFulfillmentPreflight,
   'order-quote': handleOrderQuote,
   catalog: handleCatalog,
   currency: handleCurrency,
