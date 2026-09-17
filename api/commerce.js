@@ -275,7 +275,10 @@ const handleTabbyVerify = async (req, res) => {
     return res.status(200).json({ paid: true, order_id: normalized.metadata.order_id });
   } catch (error) {
     if (error instanceof OrderValidationError) return res.status(error.status).json({ error: error.message });
-    return res.status(502).json({ error: 'تعذر التحقق من الدفع عبر Tabby' });
+    // TEMPORARY: surface the real cause instead of a generic message, to
+    // diagnose a live Preview 502 during Phase 2 walkthrough. Revert once
+    // resolved — never do this once real customer data flows through here.
+    return res.status(502).json({ error: 'تعذر التحقق من الدفع عبر Tabby', debug: error.message });
   }
 };
 
