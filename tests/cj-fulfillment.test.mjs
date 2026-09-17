@@ -8,6 +8,7 @@ import {
   CJ_PAY_TYPE_BALANCE, CJ_PAY_TYPE_CREATE_ONLY
 } from '../lib/cj-fulfillment.js';
 import { readFile } from 'node:fs/promises';
+import { isCjErrorBody, throttleCj, CJ_MIN_REQUEST_GAP_MS } from '../lib/cj-client.js';
 import { selectLogisticsMethod, maxAgingDays, MIN_ACCEPTABLE_MARGIN_PERCENT, CJ_BALANCE_LOW_WARNING_AED } from '../lib/logistics-policy.js';
 import { PROVIDER_STATUS_MAP, nextInternalStatusFromCjStatus, serializeOrderForCustomer } from '../lib/fulfillment-status.js';
 import { AJLIB_VARIANT_KEYS } from '../lib/cj-variant-map.js';
@@ -548,4 +549,73 @@ test('the CJ payload uses the STORED structured city, not anything parsed out of
   // The address string mentions دبي; the structured city is أبوظبي. The
   // payload must reflect the stored field, with no inference from the address.
   assert.equal(payload.shippingCity, 'أبوظبي');
+});
+
+// ---- CJ API FAILURES MUST NOT LOOK LIKE BUSINESS CONDITIONS ------------------
+// Found live: CJ enforces "QPS limit is 1 time/1second" and reports it in the
+// BODY with HTTP 200. Before this guard, a rate-limited freight call returned
+// zero methods and was indistinguishable from a destination with no routes.
+
+test('a rate-limited freight response raises a CJ API error, NOT "no logistics available"', async () => {
+  await withEnv({ CJ_API_KEY: 'test' }, async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => {
+      const u = String(url);
+      if (u.includes('getAccessToken')) return { ok: true, json: async () => ({ data: { accessToken: 'tok', accessTokenExpiryDate: new Date(Date.now() + 3600_000).toISOString() } }) };
+      // Exactly what CJ really returns when the QPS limit is hit.
+      return { ok: true, json: async () => ({ code: 1600200, message: 'Too Many Requests, QPS limit is 1 time/1second', result: false, data: null }) };
+    };
+    try {
+      await assert.rejects(
+        () => resolveFreightAndLogistics({ resolvedItems: [{ cjVariantId: '1', quantity: 5 }], destinationCountryCode: 'AE' }),
+        (err) => {
+          assert.equal(err.reason, 'CJ_FREIGHT_API_ERROR');
+          assert.equal(err.details.rateLimited, true);
+          return true;
+        }
+      );
+    } finally { globalThis.fetch = originalFetch; }
+  });
+});
+
+test('a rate-limited cost lookup raises a CJ API error rather than reporting a missing cost', async () => {
+  await withEnv({ CJ_API_KEY: 'test' }, async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => {
+      if (String(url).includes('getAccessToken')) return { ok: true, json: async () => ({ data: { accessToken: 'tok', accessTokenExpiryDate: new Date(Date.now() + 3600_000).toISOString() } }) };
+      return { ok: true, json: async () => ({ code: 1600200, message: 'Too Many Requests, QPS limit is 1 time/1second', result: false }) };
+    };
+    try {
+      await assert.rejects(
+        () => getCurrentCjProductCosts([{ cjVariantId: '1', quantity: 5 }]),
+        (err) => err.reason === 'CJ_COST_API_ERROR'
+      );
+    } finally { globalThis.fetch = originalFetch; }
+  });
+});
+
+test('isCjErrorBody treats a CJ success envelope as success and any error code as failure', () => {
+  assert.equal(isCjErrorBody({ code: 200, result: true, data: [] }), false);
+  assert.equal(isCjErrorBody({ code: 1600200, result: false }), true);
+  assert.equal(isCjErrorBody({ code: 1600101, message: 'Interface not found', result: false }), true);
+});
+
+test('consecutive CJ calls are spaced to respect the live 1 request/second QPS limit', async () => {
+  assert.ok(CJ_MIN_REQUEST_GAP_MS >= 1000, 'gap must be at least CJ\'s documented 1s window');
+  const started = [];
+  const run = (n) => throttleCj(async () => { started.push({ n, at: Date.now() }); return n; });
+  const results = await Promise.all([run(1), run(2)]);
+  assert.deepEqual(results, [1, 2]);
+  assert.ok(started[1].at - started[0].at >= CJ_MIN_REQUEST_GAP_MS - 50, 'second CJ call must not fire inside the QPS window');
+});
+
+// ---- BALANCE ENDPOINT CURRENTLY UNAVAILABLE ---------------------------------
+
+test('CJ\'s real "Interface not found" balance response blocks fulfillment instead of assuming funds', () => {
+  // Exactly what the live account returns today for GET /shopping/balance/getBalance.
+  const realResponse = { code: 1600101, message: 'Interface not found', result: false, data: null };
+  assert.equal(parseCjBalanceUSD(realResponse), null);
+  const verdict = evaluateBalanceSufficiency({ balanceUSD: parseCjBalanceUSD(realResponse), requiredUSD: 21.57 });
+  assert.equal(verdict.sufficient, false);
+  assert.equal(verdict.reason, 'CJ_BALANCE_UNAVAILABLE');
 });
