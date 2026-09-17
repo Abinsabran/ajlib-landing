@@ -5,7 +5,6 @@ import { COUNTRY_CURRENCY, currencyForCountry, convertAedFilsForDisplay } from '
 import { isTabbyPotentiallyAvailable, createCheckoutSession, verifyPayment } from '../lib/tabby-client.js';
 import { buildValidatedOrder, OrderValidationError } from '../lib/order-validation.js';
 import { persistPaidOrder } from './stripe-webhook.js';
-import { getShops } from '../lib/cj-client.js';
 
 // Grouped, provider-neutral handler for the foundation endpoints added
 // alongside the existing per-feature functions (checkout-session.js,
@@ -313,25 +312,17 @@ const handleTabbyVerify = async (req, res) => {
 // is available at every quantity for every destination. See the Phase 3
 // report for the full 8x5 matrix.
 
-// TEMPORARY: resolve the exact shopId for "AJLIB — Default store" vs the
-// manually added "ajlib" store, per CJ's official GET /shop/getShops. Remove
-// once resolved.
-const handleCjShopsDiagnostic = async (req, res) => {
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
-  try {
-    const result = await getShops();
-    return res.status(200).json(result);
-  } catch (error) {
-    return res.status(502).json({ error: error.message });
-  }
-};
+// Shop-list diagnostic (cj-shops-diagnostic) removed now that it resolved
+// AJLIB_DEFAULT_SHOP_ID (see lib/cj-store-connection.js) via GET
+// /shop/getShops: two "api"-type shops exist; the one named exactly "AJLIB"
+// (id 2609160939212912600) is used, distinguished from the other entry
+// which carries a stray leading Arabic diacritic in its name.
 
 const HANDLERS = {
   'order-quote': handleOrderQuote,
   catalog: handleCatalog,
   currency: handleCurrency,
   'tabby-availability': handleTabbyAvailability,
-  'cj-shops-diagnostic': handleCjShopsDiagnostic,
   'tabby-checkout': handleTabbyCheckout,
   'tabby-verify': handleTabbyVerify
 };

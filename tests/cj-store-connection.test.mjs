@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { AJLIB_VARIANT_KEYS, CJ_VARIANT_MAP, CJ_PRODUCT_FAMILY_PID, CJ_PRODUCT_FAMILY_SKU } from '../lib/cj-variant-map.js';
-import { buildSaveProductPayload, buildSaveVariantBatchPayload, buildCreateConnectionPayload, platformVariantId, AJLIB_PLATFORM_PRODUCT_ID, LOGISTICS_METHODS_COMMON_TO_ALL_SUPPORTED_DESTINATIONS, RECOMMENDED_DEFAULT_LOGISTICS } from '../lib/cj-store-connection.js';
+import { buildSaveProductPayload, buildSaveVariantBatchPayload, buildCreateConnectionPayload, platformVariantId, AJLIB_PLATFORM_PRODUCT_ID, LOGISTICS_METHODS_COMMON_TO_ALL_SUPPORTED_DESTINATIONS, RECOMMENDED_DEFAULT_LOGISTICS, AJLIB_DEFAULT_SHOP_ID } from '../lib/cj-store-connection.js';
 import { serializeOrderForCustomer } from '../lib/fulfillment-status.js';
 
 // Phase 3: validates the exact payload shapes CJ's official docs specify for
@@ -118,10 +118,28 @@ test('Create Connection payload accepts either confirmed common logistics method
   }
 });
 
-test('Create Connection payload never includes a targetCountry/targetCountryCode — AJLIB serves multiple markets, not one', () => {
-  const payload = buildCreateConnectionPayload({ defaultArea: 1, logistics: 'CJPacket Postal' });
-  assert.equal('targetCountry' in payload, false);
-  assert.equal('targetCountryCode' in payload, false);
+test('Create Connection payload declares AE/United Arab Emirates as the primary target market per CJ support guidance', () => {
+  // Updated per explicit CJ support guidance: set a declared primary market
+  // on the connection. This is NOT an enforced shipping restriction — see
+  // the file header comment: createOrder always supplies its own
+  // destination independently, and freightCalculate already confirmed
+  // valid routes to all 8 supported markets for this same vid.
+  const payload = buildCreateConnectionPayload({ defaultArea: 1, logistics: 'DHL Official' });
+  assert.equal(payload.targetCountryCode, 'AE');
+  assert.equal(payload.targetCountry, 'United Arab Emirates');
+});
+
+test('Create Connection payload includes the explicit AJLIB Default Store shopId, not the manually-added store', () => {
+  const payload = buildCreateConnectionPayload({ defaultArea: 1, logistics: 'DHL Official' });
+  assert.equal(payload.shopId, AJLIB_DEFAULT_SHOP_ID);
+  assert.notEqual(payload.shopId, undefined);
+});
+
+test('Save Product and Save Variant Batch payloads also include the explicit shopId', () => {
+  const productPayload = buildSaveProductPayload({ image: 'https://www.ajlib.store/images/products/boxer-black.jpg', priceMin: 18.5, priceMax: 25 });
+  const variantPayload = buildSaveVariantBatchPayload({ imageFor: () => 'https://www.ajlib.store/images/products/boxer-black.jpg', shopPrice: 25 });
+  assert.equal(productPayload.shopId, AJLIB_DEFAULT_SHOP_ID);
+  assert.equal(variantPayload.shopId, AJLIB_DEFAULT_SHOP_ID);
 });
 
 test('recommended default logistics is DHL Official — the only method confirmed available at real AJLIB order quantities (5-50) across all 8 destinations', () => {
