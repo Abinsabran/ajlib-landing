@@ -5,11 +5,15 @@ import {
   evaluateFulfillmentMargin, alreadyHasFulfillmentOrder, cjOrderNumberFor, buildCjOrderPayload,
   prepareFulfillment, FulfillmentBlockedError,
   parseCjBalanceUSD, evaluateBalanceSufficiency, aedToUsd,
-  CJ_PAY_TYPE_BALANCE, CJ_PAY_TYPE_CREATE_ONLY
+  CJ_PAY_TYPE_BALANCE, CJ_PAY_TYPE_CREATE_ONLY,
+  paymentFeeUSD, computeTrueVariableCost, minimumRevenueAedForMargin
 } from '../lib/cj-fulfillment.js';
 import { readFile } from 'node:fs/promises';
 import { isCjErrorBody, throttleCj, CJ_MIN_REQUEST_GAP_MS } from '../lib/cj-client.js';
-import { selectLogisticsMethod, maxAgingDays, MIN_ACCEPTABLE_MARGIN_PERCENT, CJ_BALANCE_LOW_WARNING_AED } from '../lib/logistics-policy.js';
+import {
+  selectLogisticsMethod, maxAgingDays, MIN_ACCEPTABLE_MARGIN_PERCENT, CJ_BALANCE_LOW_WARNING_AED,
+  classifyMargin, CJ_MARGIN_AUTO_PERCENT, CJ_MARGIN_REVIEW_FLOOR_PERCENT, CJ_MARGIN_TARGET_PERCENT
+} from '../lib/logistics-policy.js';
 import { PROVIDER_STATUS_MAP, nextInternalStatusFromCjStatus, serializeOrderForCustomer } from '../lib/fulfillment-status.js';
 import { AJLIB_VARIANT_KEYS } from '../lib/cj-variant-map.js';
 
@@ -229,16 +233,17 @@ test('the approved default margin threshold is 20% and is applied when no explic
   assert.ok(withEub.details.marginPercent > 20);
 });
 
-test('a known additional fulfillment/customization cost is included in the margin calculation', () => {
+test('a known per-unit customization/sticker cost is included in the true variable cost', () => {
   const base = evaluateFulfillmentMargin({
     productAmountCollectedFils: 11900, shippingAmountCollectedFils: 0,
-    cjProductCostUSD: 11.05, cjShippingCostUSD: 10.52
+    cjProductCostUSD: 11.05, cjShippingCostUSD: 10.52, unitCount: 5
   });
   const withExtra = evaluateFulfillmentMargin({
     productAmountCollectedFils: 11900, shippingAmountCollectedFils: 0,
-    cjProductCostUSD: 11.05, cjShippingCostUSD: 10.52, additionalFulfillmentCostUSD: 5
+    cjProductCostUSD: 11.05, cjShippingCostUSD: 10.52, unitCount: 5,
+    customizationCostPerUnitUSD: 1 // $1/unit x 5 units
   });
-  assert.equal(withExtra.details.fulfillmentCostUSD - base.details.fulfillmentCostUSD, 5);
+  assert.ok(Math.abs((withExtra.details.fulfillmentCostUSD - base.details.fulfillmentCostUSD) - 5) < 1e-9);
   assert.ok(withExtra.details.marginPercent < base.details.marginPercent);
 });
 
@@ -655,4 +660,108 @@ test('with AE\'s real published promise (max 3 days) no live CJ route qualifies 
   const relaxed = selectLogisticsMethod(liveAeMethods, { countryCode: 'AE', maxDeliveryDays: 10 });
   assert.equal(relaxed.method, 'CJPacket Liquid Line');
   assert.equal(relaxed.cost, 13.25);
+});
+
+// ---- MARGIN BAND (25% auto / 20-25% review / <20% block) --------------------
+
+test('the configurable margin band thresholds match the approved commercial policy', () => {
+  assert.equal(CJ_MARGIN_AUTO_PERCENT, 25);
+  assert.equal(CJ_MARGIN_REVIEW_FLOOR_PERCENT, 20);
+  assert.equal(CJ_MARGIN_TARGET_PERCENT, 30);
+});
+
+test('classifyMargin maps each band correctly, including the exact boundaries', () => {
+  assert.equal(classifyMargin(30), 'GREEN');
+  assert.equal(classifyMargin(25), 'GREEN');   // boundary is inclusive
+  assert.equal(classifyMargin(24.99), 'REVIEW');
+  assert.equal(classifyMargin(20), 'REVIEW');  // boundary is inclusive
+  assert.equal(classifyMargin(19.99), 'BLOCK');
+  assert.equal(classifyMargin(-5), 'BLOCK');
+  assert.equal(classifyMargin(NaN), 'BLOCK');
+});
+
+test('a REVIEW-band order is NOT auto-fulfilled by default, but is distinguished from a BLOCK', () => {
+  // ~22% true net margin.
+  const review = evaluateFulfillmentMargin({
+    productAmountCollectedFils: 11900, shippingAmountCollectedFils: 0,
+    cjProductCostUSD: 11.05, cjShippingCostUSD: 13.25, unitCount: 5
+  });
+  assert.equal(review.band, 'REVIEW');
+  assert.equal(review.approved, false, 'REVIEW must not auto-fulfill by default');
+  assert.equal(review.reason, 'MARGIN_REVIEW_REQUIRED');
+
+  // The same order with the escape hatch explicitly enabled.
+  const allowed = evaluateFulfillmentMargin({
+    productAmountCollectedFils: 11900, shippingAmountCollectedFils: 0,
+    cjProductCostUSD: 11.05, cjShippingCostUSD: 13.25, unitCount: 5,
+    allowReviewBandAutofulfill: true
+  });
+  assert.equal(allowed.band, 'REVIEW');
+  assert.equal(allowed.approved, true);
+});
+
+// ---- TRUE VARIABLE COST (payment fee included) ------------------------------
+
+test('the payment fee is a real variable cost and lowers reported margin vs product+freight alone', () => {
+  const withFee = evaluateFulfillmentMargin({
+    productAmountCollectedFils: 11900, shippingAmountCollectedFils: 0,
+    cjProductCostUSD: 11.05, cjShippingCostUSD: 10.52, unitCount: 5
+  });
+  const productAndFreightOnly = 11.05 + 10.52;
+  assert.ok(withFee.details.fulfillmentCostUSD > productAndFreightOnly, 'true cost must exceed product+freight');
+  assert.ok(withFee.details.breakdown.paymentFeeUSD > 0);
+});
+
+test('Stripe fee follows the published UAE card rate (2.9% + AED 1.00), with the international surcharge applied only when relevant', () => {
+  // 119 AED -> 2.9% + 1.00 = 4.451 AED
+  const domestic = paymentFeeUSD({ amountCollectedFils: 11900, provider: 'stripe' });
+  assert.ok(Math.abs(domestic - aedToUsd(4.451)) < 1e-9);
+  const international = paymentFeeUSD({ amountCollectedFils: 11900, provider: 'stripe', international: true });
+  assert.ok(international > domestic);
+});
+
+test('a Tabby order cannot be margin-approved while its negotiated rate is unconfigured', () => {
+  // TABBY_FEE_PERCENT is intentionally null until the real rate is supplied.
+  assert.equal(paymentFeeUSD({ amountCollectedFils: 11900, provider: 'tabby' }), null);
+  const verdict = evaluateFulfillmentMargin({
+    productAmountCollectedFils: 11900, shippingAmountCollectedFils: 0,
+    cjProductCostUSD: 11.05, cjShippingCostUSD: 10.52, unitCount: 5, provider: 'tabby'
+  });
+  assert.equal(verdict.approved, false);
+  assert.equal(verdict.reason, 'PAYMENT_FEE_NOT_CONFIGURED');
+  assert.equal(verdict.band, 'BLOCK');
+});
+
+test('CJ platformPrice is still never part of the true variable cost', () => {
+  const cost = computeTrueVariableCost({
+    cjProductCostUSD: 11.05, cjShippingCostUSD: 10.52, unitCount: 5, amountCollectedFils: 11900
+  });
+  assert.equal(cost.breakdown.cjProductCostUSD, 11.05);
+  assert.ok(!Object.keys(cost.breakdown).some(k => /platform/i.test(k)));
+});
+
+// ---- REVERSE PRICING SOLVER --------------------------------------------------
+
+test('minimumRevenueAedForMargin solves for a price that actually yields the target margin', () => {
+  const nonPayment = 11.05 + 13.25; // product + freight, USD
+  for (const target of [20, 25, 30]) {
+    const priceAed = minimumRevenueAedForMargin({ targetMarginPercent: target, nonPaymentVariableCostUSD: nonPayment });
+    assert.ok(priceAed > 0);
+    // Feed the solved price back through the real evaluator: it must land
+    // on the target margin (within rounding).
+    const check = evaluateFulfillmentMargin({
+      productAmountCollectedFils: Math.round(priceAed * 100), shippingAmountCollectedFils: 0,
+      cjProductCostUSD: 11.05, cjShippingCostUSD: 13.25, unitCount: 5
+    });
+    assert.ok(Math.abs(check.details.marginPercent - target) < 0.01, `target ${target}% -> got ${check.details.marginPercent}`);
+  }
+});
+
+test('an unreachable margin target returns null rather than a nonsensical price', () => {
+  // Once the target margin plus the fee rate reaches 100%, no price covers
+  // the cost — the equation has no positive solution.
+  assert.equal(minimumRevenueAedForMargin({ targetMarginPercent: 98, nonPaymentVariableCostUSD: 10 }), null);
+  assert.equal(minimumRevenueAedForMargin({ targetMarginPercent: 120, nonPaymentVariableCostUSD: 10 }), null);
+  // A normal target is reachable.
+  assert.ok(minimumRevenueAedForMargin({ targetMarginPercent: 30, nonPaymentVariableCostUSD: 10 }) > 0);
 });
