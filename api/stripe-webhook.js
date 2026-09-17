@@ -130,6 +130,14 @@ const updateInventory = async (session) => {
   if (!response.ok) throw new Error('Inventory update failed');
 };
 
+// Shared, provider-neutral order-persistence pipeline: save the paid order
+// (idempotent upsert on stripe_session_id — reused here as a generic
+// "this provider's unique payment reference" key, not Stripe-specific),
+// email the team, and decrement inventory. Both Stripe event handlers below
+// and the Tabby verify path (api/commerce.js, resource=tabby-verify) call
+// this instead of each re-implementing it.
+export const persistPaidOrder = (session) => Promise.all([saveOrder(session), sendOrderEmail(session), updateInventory(session)]);
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!process.env.STRIPE_WEBHOOK_SECRET || !process.env.RESEND_API_KEY) {
@@ -142,7 +150,7 @@ export default async function handler(req, res) {
     }
     const event = JSON.parse(raw.toString('utf8'));
     if (event.type === 'checkout.session.completed' && event.data?.object?.payment_status === 'paid') {
-      await Promise.all([saveOrder(event.data.object), sendOrderEmail(event.data.object), updateInventory(event.data.object)]);
+      await persistPaidOrder(event.data.object);
     }
     // Native Expo app checkout (PaymentSheet) confirms via PaymentIntent, not a
     // Checkout Session — normalize it into the same shape so paid orders from
@@ -165,7 +173,7 @@ export default async function handler(req, res) {
         payment_intent: intent.id,
         created: intent.created
       };
-      await Promise.all([saveOrder(normalized), sendOrderEmail(normalized), updateInventory(normalized)]);
+      await persistPaidOrder(normalized);
     }
     return res.status(200).json({ received: true });
   } catch (error) {

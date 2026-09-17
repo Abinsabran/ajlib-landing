@@ -1,5 +1,4 @@
-import { quoteShipping } from './shipping-quote.js';
-import { computeProductPricing } from '../lib/pricing.js';
+import { buildValidatedOrder, OrderValidationError } from '../lib/order-validation.js';
 
 const stripeRequest = async (path, options = {}) => {
   const response = await fetch(`https://api.stripe.com/v1/${path}`, {
@@ -38,44 +37,15 @@ export default async function handler(req, res) {
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
     const order = req.body || {};
 
-    const grouped = {};
-    for (const item of order.cart?.items || []) {
-      const key = `${item.color}-${item.size}`;
-      grouped[key] = (grouped[key] || 0) + 1;
+    let validated;
+    try {
+      const accessToken = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+      validated = await buildValidatedOrder(order, { accessToken });
+    } catch (error) {
+      if (error instanceof OrderValidationError) return res.status(error.status).json({ error: error.message });
+      throw error; // falls through to the outer catch below, same as before extraction
     }
-    const itemSummary = Object.entries(grouped).map(([key, count]) => `${key}:${count}`).join(',').slice(0, 500);
-    const requestedItems = Object.entries(grouped).map(([variant, quantity]) => ({ variant, quantity }));
-    const quantity = requestedItems.reduce((sum, item) => sum + item.quantity, 0);
-    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100) return res.status(400).json({ error: 'كمية الطلب غير صحيحة' });
-    const { productAmount } = computeProductPricing(quantity);
-    if (process.env.SUPABASE_URL && process.env.SUPABASE_SECRET_KEY) {
-      const inventoryResponse = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/check_inventory`, {
-        method: 'POST',
-        headers: { apikey: process.env.SUPABASE_SECRET_KEY, Authorization: `Bearer ${process.env.SUPABASE_SECRET_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ requested: requestedItems })
-      });
-      if (!inventoryResponse.ok) throw new Error('تعذر التحقق من توفر المخزون');
-      const shortages = await inventoryResponse.json();
-      const unavailable = shortages.filter(x => !x.allow_preorder);
-      if (unavailable.length) return res.status(409).json({ error: `الكمية غير متوفرة حاليًا: ${unavailable.map(x => `${x.variant} (متاح ${x.available})`).join('، ')}` });
-      order.preorders = shortages.filter(x => x.allow_preorder);
-    }
-    const customer = order.customer || {};
-    const customerEmail = String(customer.email || '').trim().toLowerCase();
-    const emailDomain = customerEmail.split('@')[1] || '';
-    const commonDomainTypos = new Set(['gamil.com', 'gmial.com', 'gmai.com', 'gmail.co', 'hotnail.com', 'hotmai.com', 'outlok.com', 'yaho.com']);
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail)) return res.status(400).json({ error: 'اكتب بريدًا إلكترونيًا صحيحًا' });
-    if (commonDomainTypos.has(emailDomain)) return res.status(400).json({ error: 'يبدو أن نطاق البريد مكتوب بشكل غير صحيح. راجع gmail أو مزود بريدك قبل الدفع.' });
-    const countryCode = String(customer.country_code || '').trim().toUpperCase();
-    const shipping = await quoteShipping(countryCode);
-    let userId = '';
-    const accessToken = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
-    if (accessToken && process.env.SUPABASE_URL && process.env.SUPABASE_PUBLISHABLE_KEY) {
-      const authResponse = await fetch(`${process.env.SUPABASE_URL}/auth/v1/user`, {
-        headers: { apikey: process.env.SUPABASE_PUBLISHABLE_KEY, Authorization: `Bearer ${accessToken}` }
-      });
-      if (authResponse.ok) userId = String((await authResponse.json()).id || '');
-    }
+    const { quantity, itemSummary, productAmount, shipping, customer, customerEmail, countryCode, userId, preorders } = validated;
     const origin = `https://${req.headers['x-forwarded-host'] || req.headers.host}`;
     const metadataFields = {
       'metadata[order_id]': String(order.id),
@@ -93,7 +63,7 @@ export default async function handler(req, res) {
       'metadata[shipping_amount]': String(shipping.amount),
       'metadata[shipping_zone]': shipping.zone_code,
       'metadata[user_id]': userId,
-      'metadata[preorder]': (order.preorders||[]).map(x=>`${x.variant}:${x.preorder_eta||'سيحدد لاحقًا'}`).join(',').slice(0,500)
+      'metadata[preorder]': (preorders||[]).map(x=>`${x.variant}:${x.preorder_eta||'سيحدد لاحقًا'}`).join(',').slice(0,500)
     };
 
     // Native iOS/Android checkout (Expo app via Stripe PaymentSheet) needs a

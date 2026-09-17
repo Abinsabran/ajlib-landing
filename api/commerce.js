@@ -2,7 +2,10 @@ import { quoteShipping } from './shipping-quote.js';
 import { computeProductPricing, MIN_QUANTITY, MAX_QUANTITY } from '../lib/pricing.js';
 import { PRODUCTS } from '../lib/catalog.js';
 import { COUNTRY_CURRENCY, currencyForCountry, convertAedFilsForDisplay } from '../lib/currency.js';
-import { isTabbyPotentiallyAvailable } from '../lib/tabby-client.js';
+import { isTabbyPotentiallyAvailable, createCheckoutSession, verifyPayment, tabbyDiagnosticPost } from '../lib/tabby-client.js';
+import { buildValidatedOrder, OrderValidationError } from '../lib/order-validation.js';
+import { persistPaidOrder } from './stripe-webhook.js';
+import { rawCjGet } from '../lib/cj-client.js';
 
 // Grouped, provider-neutral handler for the foundation endpoints added
 // alongside the existing per-feature functions (checkout-session.js,
@@ -151,11 +154,175 @@ const handleTabbyAvailability = async (req, res) => {
   return res.status(200).json({ available, currency, mode: process.env.TABBY_MODE || 'disabled' });
 };
 
+// ---- tabby-checkout (server-side session creation, test mode only) -----
+
+const buildTabbyOrderPayload = (validated, order) => ({
+  reference_id: String(order.id),
+  items: validated.requestedItems.map(i => ({
+    title: i.variant,
+    quantity: i.quantity,
+    unit_price: ((validated.productAmount / validated.quantity) / 100).toFixed(2),
+    category: 'clothing'
+  }))
+});
+
+const handleTabbyCheckout = async (req, res) => {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (process.env.TABBY_MODE !== 'test') return res.status(503).json({ error: 'الدفع عبر Tabby غير مفعّل بعد' });
+  const order = req.body || {};
+  try {
+    const accessToken = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+    const validated = await buildValidatedOrder(order, { accessToken });
+    const amountFils = validated.productAmount + validated.shipping.amount;
+
+    // Provider-neutral: if Tabby isn't eligible for this basket/country,
+    // report that cleanly so the caller keeps Stripe as the usable path —
+    // this never blocks or breaks the Stripe checkout flow.
+    if (!isTabbyPotentiallyAvailable({ countryCode: validated.countryCode, currency: 'AED', amountFils })) {
+      return res.status(200).json({ provider: 'tabby', available: false, reason: 'INELIGIBLE' });
+    }
+
+    const origin = `https://${req.headers['x-forwarded-host'] || req.headers.host}`;
+    const session = await createCheckoutSession({
+      orderId: order.id,
+      amountFils,
+      currency: 'AED',
+      buyer: {
+        name: String(validated.customer.name || ''),
+        email: validated.customerEmail,
+        phone: String(validated.customer.phone || '')
+      },
+      order: buildTabbyOrderPayload(validated, order),
+      shippingAddress: {
+        city: String(validated.customer.city || ''),
+        address: String(validated.customer.address || ''),
+        zip: String(validated.customer.postal_code || '')
+      },
+      successUrl: `${origin}/?tabby=success&order_id=${encodeURIComponent(order.id)}`,
+      cancelUrl: `${origin}/?tabby=cancelled&order_id=${encodeURIComponent(order.id)}`,
+      failureUrl: `${origin}/?tabby=failed&order_id=${encodeURIComponent(order.id)}`
+    });
+
+    const webUrl = session?.configuration?.available_products?.installments?.[0]?.web_url || null;
+    if (!webUrl) return res.status(200).json({ provider: 'tabby', available: false, reason: 'NO_CHECKOUT_URL' });
+
+    return res.status(200).json({ provider: 'tabby', available: true, paymentId: session.id, checkoutUrl: webUrl, status: session.status });
+  } catch (error) {
+    if (error instanceof OrderValidationError) return res.status(error.status).json({ error: error.message });
+    return res.status(502).json({ error: 'تعذر بدء الدفع عبر Tabby' });
+  }
+};
+
+// ---- tabby-verify (server-side payment verification, mandatory before
+
+const ACCEPTED_TABBY_STATUSES = new Set(['CLOSED', 'AUTHORIZED']);
+
+const handleTabbyVerify = async (req, res) => {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (process.env.TABBY_MODE !== 'test') return res.status(503).json({ error: 'الدفع عبر Tabby غير مفعّل بعد' });
+  const { payment_id: paymentId, order } = req.body || {};
+  if (!paymentId) return res.status(400).json({ error: 'معرّف الدفع مطلوب' });
+  try {
+    const accessToken = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+    const validated = await buildValidatedOrder(order || {}, { accessToken });
+    const expectedAmountFils = validated.productAmount + validated.shipping.amount;
+
+    // Server-side truth. A success redirect alone never marks an order paid.
+    const payment = await verifyPayment(paymentId);
+    const paidAmountFils = Math.round(Number(payment.amount || 0) * 100);
+
+    if (!ACCEPTED_TABBY_STATUSES.has(payment.status)) {
+      return res.status(402).json({ error: 'لم يكتمل الدفع عبر Tabby بعد', status: payment.status });
+    }
+    // Never trust the client's claimed total — cross-check Tabby's own
+    // recorded amount against our independently recomputed authoritative one.
+    if (paidAmountFils !== expectedAmountFils) {
+      return res.status(409).json({ error: 'مبلغ الدفع لا يطابق قيمة الطلب' });
+    }
+
+    const normalized = {
+      id: `tabby_${payment.id}`, // reused as the generic provider-payment-reference dedup key (see persistPaidOrder)
+      metadata: {
+        order_id: String(order?.id || ''),
+        items: validated.itemSummary,
+        customer_name: String(validated.customer.name || ''),
+        phone: String(validated.customer.phone || ''),
+        address_id: String(validated.customer.address_id || ''),
+        country_code: validated.countryCode,
+        country_name: String(validated.customer.country_name || ''),
+        region: String(validated.customer.region || ''),
+        postal_code: String(validated.customer.postal_code || ''),
+        address: `${validated.customer.address || ''}${validated.customer.address_line2 ? `, ${validated.customer.address_line2}` : ''}, ${validated.customer.city || ''}, ${validated.customer.region || ''}, ${validated.customer.country_name || validated.countryCode}, ${validated.customer.postal_code || ''}`,
+        notes: String(validated.customer.notes || ''),
+        product_amount: String(validated.productAmount),
+        shipping_amount: String(validated.shipping.amount),
+        shipping_zone: validated.shipping.zone_code,
+        user_id: validated.userId,
+        preorder: (validated.preorders || []).map(x => `${x.variant}:${x.preorder_eta || 'سيحدد لاحقًا'}`).join(',')
+      },
+      customer_details: null,
+      customer_email: validated.customerEmail,
+      amount_total: paidAmountFils,
+      currency: String(payment.currency || 'aed').toLowerCase(),
+      payment_intent: `tabby_${payment.id}`,
+      created: Math.floor(Date.now() / 1000)
+    };
+
+    await persistPaidOrder(normalized);
+    return res.status(200).json({ paid: true, order_id: normalized.metadata.order_id });
+  } catch (error) {
+    if (error instanceof OrderValidationError) return res.status(error.status).json({ error: error.message });
+    return res.status(502).json({ error: 'تعذر التحقق من الدفع عبر Tabby' });
+  }
+};
+
+// ---- cj-diagnostic (TEMPORARY, Phase 2 read-only variant discovery only) --
+// GET-only, restricted to /product* CJ paths so it can never reach an
+// order/warehouse/packaging endpoint. Never returns the CJ access token —
+// only whatever product/variant data CJ's API itself returns. Remove once
+// lib/cj-variant-map.js has been populated from confirmed results.
+
+const CJ_DIAGNOSTIC_ALLOWED_PREFIXES = ['/product'];
+
+const handleCjDiagnostic = async (req, res) => {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+  const path = String(req.query.path || '/product/query?pid=CJYD1589152');
+  if (!CJ_DIAGNOSTIC_ALLOWED_PREFIXES.some(prefix => path.startsWith(prefix))) {
+    return res.status(400).json({ error: 'Diagnostic only allows read-only /product* CJ paths' });
+  }
+  try {
+    const result = await rawCjGet(path);
+    return res.status(200).json(result);
+  } catch (error) {
+    return res.status(502).json({ error: error.message });
+  }
+};
+
+// ---- tabby-diagnostic (TEMPORARY, Phase 2 sandbox verification only) -----
+// Creates a real Tabby SANDBOX checkout attempt (test mode only, guarded by
+// TABBY_MODE) and returns Tabby's raw response so the actual API shape can
+// be confirmed instead of assumed. No money moves in test mode.
+
+const handleTabbyDiagnostic = async (req, res) => {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (process.env.TABBY_MODE !== 'test') return res.status(503).json({ error: 'Tabby diagnostic only runs in test mode' });
+  try {
+    const result = await tabbyDiagnosticPost('/checkout', req.body || {});
+    return res.status(200).json(result);
+  } catch (error) {
+    return res.status(502).json({ error: error.message });
+  }
+};
+
 const HANDLERS = {
   'order-quote': handleOrderQuote,
   catalog: handleCatalog,
   currency: handleCurrency,
-  'tabby-availability': handleTabbyAvailability
+  'tabby-availability': handleTabbyAvailability,
+  'tabby-checkout': handleTabbyCheckout,
+  'tabby-verify': handleTabbyVerify,
+  'cj-diagnostic': handleCjDiagnostic,
+  'tabby-diagnostic': handleTabbyDiagnostic
 };
 
 export default async function handler(req, res) {
