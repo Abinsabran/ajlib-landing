@@ -333,7 +333,44 @@ const handleTabbyVerify = async (req, res) => {
 // saveStoreProduct/saveStoreVariantBatch/createProductConnection/
 // queryProductConnections remain available for any future re-sync need.
 
+// TEMPORARY (post-migration schema verification, removed this round).
+// Read-only: probes column existence by selecting each one, reads the new
+// dedup table with the service role, and counts orders. No writes, no DDL,
+// no secret returned — booleans and counts only.
+const handleSchemaVerify = async (req, res) => {
+  const auth = { apikey: process.env.SUPABASE_SECRET_KEY, Authorization: `Bearer ${process.env.SUPABASE_SECRET_KEY}` };
+  const sb = (path, extra = {}) => fetch(`${process.env.SUPABASE_URL}/rest/v1/${path}`, { headers: { ...auth, ...extra } });
+
+  const columns = [
+    'shipping_city', 'fulfillment_provider', 'fulfillment_external_order_id',
+    'fulfillment_external_order_number', 'fulfillment_status', 'fulfillment_tracking_number',
+    'fulfillment_logistics_method', 'fulfillment_cost', 'fulfillment_currency',
+    'fulfillment_last_sync_at', 'fulfillment_error', 'fulfillment_retry_count'
+  ];
+  const out = { columns: {}, missing: [], table: {}, data: {} };
+  for (const column of columns) {
+    const response = await sb(`orders?select=${column}&limit=1`);
+    out.columns[column] = response.ok;
+    if (!response.ok) out.missing.push(column);
+  }
+
+  const table = await sb('cj_webhook_events?select=message_id,topic,received_at&limit=1');
+  out.table.cj_webhook_events_readable_by_service_role = table.ok;
+
+  const counted = await sb('orders?select=id', { Prefer: 'count=exact', Range: '0-0' });
+  out.data.orders_content_range = counted.headers.get('content-range');
+
+  const sample = await sb('orders?select=order_number,status,amount_total,shipping_city,fulfillment_status,fulfillment_retry_count&limit=3&order=created_at.desc');
+  out.data.sample = sample.ok ? await sample.json() : 'unreadable';
+
+  const zones = await sb('shipping_zones?select=code,min_days,max_days,active&code=eq.AE');
+  out.data.ae_shipping_zone_rows = zones.ok ? await zones.json() : 'unreadable';
+
+  return res.status(200).json(out);
+};
+
 const HANDLERS = {
+  'schema-verify': handleSchemaVerify,
   'order-quote': handleOrderQuote,
   catalog: handleCatalog,
   currency: handleCurrency,
