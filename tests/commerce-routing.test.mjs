@@ -67,6 +67,6 @@ test('tabby-availability resource: hidden (available:false) when TABBY_MODE is n
 test('order-quote resource still works when dispatched through the consolidated handler', async () => {
   const res = await handler({ method: 'GET', query: { resource: 'order-quote', country: 'AE', quantity: '10' } }, makeRes());
   assert.equal(res.statusCode, 200);
-  assert.equal(res.body.productSubtotal, 21900);
+  assert.equal(res.body.productSubtotal, 26900);
   assert.equal(res.body.shipping, 0);
 });

@@ -92,8 +92,9 @@ test('route selection honours the approved 7-14 day window using real AE aging d
 
 // ---- CURRENT PRICING IS UNSAFE ----------------------------------------------
 
-test('current AJLIB prices fail the 25% auto band on BOTH providers at every UAE tier', () => {
-  // Live route + freight actually selected for each tier within the promise.
+test('the PREVIOUS prices failed the 25% band on both providers — regression guard against reverting', () => {
+  // Kept as a record of why the ladder was repriced: at the old prices not
+  // one tier cleared the band, and Tabby was below the 20% floor everywhere.
   const tiers = [
     { qty: 5, priceAed: 119, freight: 13.25 },
     { qty: 10, priceAed: 219, freight: 23.15 },
@@ -114,15 +115,15 @@ test('current AJLIB prices fail the 25% auto band on BOTH providers at every UAE
   }
 });
 
-test('the recommended launch prices reach GREEN on BOTH providers at every tier', () => {
-  const recommended = [
+test('the APPROVED launch prices reach GREEN on BOTH providers at every tier', () => {
+  const approved = [
     { qty: 5, priceAed: 135, freight: 13.25 },
-    { qty: 10, priceAed: 265, freight: 23.15 },
-    { qty: 15, priceAed: 396, freight: 38.89 },
-    { qty: 20, priceAed: 516, freight: 48.98 },
-    { qty: 50, priceAed: 1250, freight: 118.24 }
+    { qty: 10, priceAed: 269, freight: 23.15 },
+    { qty: 15, priceAed: 399, freight: 38.89 },
+    { qty: 20, priceAed: 519, freight: 48.98 },
+    { qty: 50, priceAed: 1249, freight: 118.24 }
   ];
-  for (const { qty, priceAed, freight } of recommended) {
+  for (const { qty, priceAed, freight } of approved) {
     for (const provider of ['stripe', 'tabby']) {
       const verdict = evaluateFulfillmentMargin({
         productAmountCollectedFils: priceAed * 100, shippingAmountCollectedFils: 0,
@@ -134,8 +135,8 @@ test('the recommended launch prices reach GREEN on BOTH providers at every tier'
   }
 });
 
-test('the recommended ladder never inverts — price per unit never rises with quantity', () => {
-  const ladder = [[5, 135], [10, 265], [15, 396], [20, 516], [50, 1250]];
+test('the approved ladder never inverts — price per unit never rises with quantity', () => {
+  const ladder = [[5, 135], [10, 269], [15, 399], [20, 519], [50, 1249]];
   for (let i = 1; i < ladder.length; i += 1) {
     const prev = ladder[i - 1][1] / ladder[i - 1][0];
     const current = ladder[i][1] / ladder[i][0];

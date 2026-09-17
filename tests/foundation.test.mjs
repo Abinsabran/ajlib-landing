@@ -4,21 +4,35 @@ import { computeProductPricing, MIN_QUANTITY, MAX_QUANTITY } from '../lib/pricin
 import { allVariants, PRODUCTS, COLORS, SIZES } from '../lib/catalog.js';
 import { COUNTRY_CURRENCY, currencyForCountry, convertAedFilsForDisplay } from '../lib/currency.js';
 import { customerStatusFor, serializeOrderForCustomer, CUSTOMER_STATUS } from '../lib/fulfillment-status.js';
+import { readFile } from 'node:fs/promises';
 
-// PRICING — must keep matching the live checkout-session.js formula exactly
-// (119/219/309/389 AED at 5/10/15/20, converging to 18.50/unit at 50+).
-test('pricing: matches the current live tiers exactly', () => {
-  assert.equal(computeProductPricing(5).productAmount, 11900);
-  assert.equal(computeProductPricing(10).productAmount, 21900);
-  assert.equal(computeProductPricing(15).productAmount, 30900);
-  assert.equal(computeProductPricing(20).productAmount, 38900);
-  assert.equal(computeProductPricing(50).productAmount, 92500);
+// PRICING — approved UAE launch ladder: 135/269/399/519 AED at 5/10/15/20,
+// 1249 at 50+. Every tier clears 25% true net margin on BOTH Stripe and
+// Tabby; tests/pricing-economics.test.mjs holds the margin proof. The
+// storefront (index.html) duplicates this ladder and must stay in lockstep.
+test('pricing: matches the approved launch tiers exactly', () => {
+  assert.equal(computeProductPricing(5).productAmount, 13500);
+  assert.equal(computeProductPricing(10).productAmount, 26900);
+  assert.equal(computeProductPricing(15).productAmount, 39900);
+  assert.equal(computeProductPricing(20).productAmount, 51900);
+  assert.equal(computeProductPricing(50).productAmount, 124900);
+  // Sub-5 is UNCHANGED and was not part of the approved tiers.
   assert.equal(computeProductPricing(1).productAmount, 2500);
 });
 
-test('pricing: unit price converges to 18.50 at and above 50', () => {
-  assert.equal(computeProductPricing(50).unitPrice, 18.5);
-  assert.equal(computeProductPricing(MAX_QUANTITY).unitPrice, 18.5);
+test('pricing: unit price converges to 24.98 at and above 50', () => {
+  assert.equal(computeProductPricing(50).unitPrice, 1249 / 50);
+  assert.equal(computeProductPricing(MAX_QUANTITY).unitPrice, 1249 / 50);
+});
+
+test('pricing: the volume ladder never inverts across the approved tiers', () => {
+  const tiers = [5, 10, 15, 20, 50];
+  for (let i = 1; i < tiers.length; i += 1) {
+    assert.ok(
+      computeProductPricing(tiers[i]).unitPrice <= computeProductPricing(tiers[i - 1]).unitPrice,
+      `qty ${tiers[i]} costs more per unit than qty ${tiers[i - 1]}`
+    );
+  }
 });
 
 test('pricing: quantity bounds match the server-enforced range (1-100)', () => {
@@ -87,5 +101,28 @@ test('fulfillment: no internal/provider fields leak into the customer serializat
   const serialized = serializeOrderForCustomer(order);
   for (const leaked of ['fulfillmentProvider', 'fulfillmentExternalOrderId', 'fulfillmentError', 'stripe_session_id']) {
     assert.equal(serialized[leaked], undefined, `${leaked} leaked to the customer`);
+  }
+});
+
+// The storefront duplicates the pricing ladder (index.html defines both a
+// `packs` array and flexibleUnitPrice). If it drifts from lib/pricing.js the
+// customer sees one price and is charged another, so pin them together.
+test('storefront pricing matches the server-authoritative ladder exactly', async () => {
+  const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+
+  const packs = [...html.matchAll(/\{n:(\d+),p:(\d+),label:/g)].map(m => ({ n: Number(m[1]), p: Number(m[2]) }));
+  assert.ok(packs.length >= 4, 'could not find the storefront pack definitions');
+  for (const pack of packs) {
+    assert.equal(pack.p * 100, computeProductPricing(pack.n).productAmount, `pack of ${pack.n} shows ${pack.p} AED but the server charges ${computeProductPricing(pack.n).productAmount / 100}`);
+  }
+
+  const fn = html.match(/function flexibleUnitPrice\(n\)\{([^}]*)\}/);
+  assert.ok(fn, 'could not find flexibleUnitPrice in the storefront');
+  const flexibleUnitPrice = new Function('n', fn[1]);
+  for (const qty of [1, 4, 5, 9, 10, 14, 15, 19, 20, 49, 50, 100]) {
+    assert.ok(
+      Math.abs(flexibleUnitPrice(qty) - computeProductPricing(qty).unitPrice) < 1e-9,
+      `qty ${qty}: storefront ${flexibleUnitPrice(qty)} vs server ${computeProductPricing(qty).unitPrice}`
+    );
   }
 });

@@ -57,11 +57,11 @@ test('tabby-checkout uses the server-authoritative quote, not any client-submitt
     };
     try {
       // Client tries to claim a tiny amount — order-validation.js recomputes
-      // the real 5-piece total (119 AED) server-side regardless.
+      // the real 5-piece total (135 AED) server-side regardless.
       const order = validOrder({ claimedAmountFils: 1 });
       const res = await handler({ method: 'POST', query: { resource: 'tabby-checkout' }, body: order, headers: {} }, makeRes());
       assert.equal(res.statusCode, 200);
-      assert.equal(capturedBody.payment.amount, '119.00'); // 5 x 23.80 AED, the real tiered price
+      assert.equal(capturedBody.payment.amount, '135.00'); // 5 x 27.00 AED, the approved tiered price
     } finally { globalThis.fetch = originalFetch; }
   });
 });
@@ -92,7 +92,7 @@ test('tabby-verify requires a payment_id and never marks paid from a bare redire
 test('tabby-verify calls Tabby server-side and rejects an incomplete payment status', async () => {
   await withEnv({ TABBY_MODE: 'test', TABBY_SECRET_KEY: 'sk_test_x' }, async () => {
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = async () => ({ ok: true, json: async () => ({ id: 'pay_test_1', status: 'REJECTED', amount: '119.00', currency: 'AED' }) });
+    globalThis.fetch = async () => ({ ok: true, json: async () => ({ id: 'pay_test_1', status: 'REJECTED', amount: '135.00', currency: 'AED' }) });
     try {
       const res = await handler({ method: 'POST', query: { resource: 'tabby-verify' }, body: { payment_id: 'pay_test_1', order: validOrder() }, headers: {} }, makeRes());
       assert.equal(res.statusCode, 402);
@@ -115,7 +115,7 @@ test('tabby-verify persists the order only once amount and status both check out
   await withEnv({ TABBY_MODE: 'test', TABBY_SECRET_KEY: 'sk_test_x', SUPABASE_URL: 'https://example.supabase.co', SUPABASE_SECRET_KEY: 'service_role_test', RESEND_API_KEY: 'resend_test' }, async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = async (url) => {
-      if (String(url).includes('/payments/')) return { ok: true, json: async () => ({ id: 'pay_test_1', status: 'CLOSED', amount: '119.00', currency: 'AED' }) };
+      if (String(url).includes('/payments/')) return { ok: true, json: async () => ({ id: 'pay_test_1', status: 'CLOSED', amount: '135.00', currency: 'AED' }) };
       if (String(url).includes('api.resend.com')) return { ok: true, json: async () => ({ id: 'email_1' }) };
       if (String(url).includes('/rest/v1/orders')) return { ok: true, text: async () => JSON.stringify([{ id: 'order-uuid-verified', order_number: 'AJ-TABBY-TEST-1', stripe_session_id: 'tabby_pay_test_1' }]) };
       if (String(url).includes('/rpc/process_paid_inventory')) return { ok: true, json: async () => ({}) };
@@ -140,7 +140,7 @@ test('THE BUG: tabby-verify must NOT report paid:true when the order upsert repo
   await withEnv({ TABBY_MODE: 'test', TABBY_SECRET_KEY: 'sk_test_x', SUPABASE_URL: 'https://example.supabase.co', SUPABASE_SECRET_KEY: 'restricted_key_test', RESEND_API_KEY: 'resend_test' }, async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = async (url) => {
-      if (String(url).includes('/payments/')) return { ok: true, json: async () => ({ id: 'pay_norow_1', status: 'CLOSED', amount: '119.00', currency: 'AED' }) };
+      if (String(url).includes('/payments/')) return { ok: true, json: async () => ({ id: 'pay_norow_1', status: 'CLOSED', amount: '135.00', currency: 'AED' }) };
       if (String(url).includes('api.resend.com')) return { ok: true, json: async () => ({ id: 'email_1' }) };
       // The exact failure mode: PostgREST reports 201 (ok) but the
       // representation is empty — e.g. an RLS-restricted read-back, a key
@@ -173,7 +173,7 @@ test('CONFIRMED LIVE ROOT CAUSE: missing SUPABASE_SECRET_KEY silently no-ops sav
     const calls = [];
     globalThis.fetch = async (url) => {
       calls.push(String(url));
-      if (String(url).includes('/payments/')) return { ok: true, json: async () => ({ id: 'pay_nokey_1', status: 'CLOSED', amount: '119.00', currency: 'AED' }) };
+      if (String(url).includes('/payments/')) return { ok: true, json: async () => ({ id: 'pay_nokey_1', status: 'CLOSED', amount: '135.00', currency: 'AED' }) };
       if (String(url).includes('api.resend.com')) return { ok: true, json: async () => ({ id: 'email_1' }) };
       if (String(url).includes('/rest/v1/shipping_zones')) return { ok: false };
       throw new Error(`unexpected fetch in test: ${url}`);
@@ -193,7 +193,7 @@ test('tabby-verify treats an EXPIRED session (real sandbox-observed status) as n
   // real, not assumed. Must be refused exactly like REJECTED, not persisted.
   await withEnv({ TABBY_MODE: 'test', TABBY_SECRET_KEY: 'sk_test_x' }, async () => {
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = async () => ({ ok: true, json: async () => ({ id: 'pay_test_1', status: 'EXPIRED', amount: '119.00', currency: 'AED' }) });
+    globalThis.fetch = async () => ({ ok: true, json: async () => ({ id: 'pay_test_1', status: 'EXPIRED', amount: '135.00', currency: 'AED' }) });
     try {
       const res = await handler({ method: 'POST', query: { resource: 'tabby-verify' }, body: { payment_id: 'pay_test_1', order: validOrder() }, headers: {} }, makeRes());
       assert.equal(res.statusCode, 402);
@@ -215,7 +215,7 @@ test('an email-provider failure does not prevent the order/inventory writes from
     const calls = [];
     globalThis.fetch = async (url, options = {}) => {
       calls.push(String(url));
-      if (String(url).includes('/payments/')) return { ok: true, json: async () => ({ id: 'pay_email_fail', status: 'CLOSED', amount: '119.00', currency: 'AED' }) };
+      if (String(url).includes('/payments/')) return { ok: true, json: async () => ({ id: 'pay_email_fail', status: 'CLOSED', amount: '135.00', currency: 'AED' }) };
       if (String(url).includes('api.resend.com')) return { ok: false, status: 401 }; // matches the real observed failure
       if (String(url).includes('/rest/v1/orders')) return { ok: true, text: async () => JSON.stringify([{ id: 'order-uuid-emailfail', order_number: 'AJ-TABBY-EMAILFAIL-1', stripe_session_id: 'tabby_pay_email_fail' }]) };
       if (String(url).includes('/rpc/process_paid_inventory')) return { ok: true, json: async () => ({}) };
@@ -238,7 +238,7 @@ test('duplicate tabby-verify calls for the same payment send byte-identical idem
     const calls = [];
     globalThis.fetch = async (url, options = {}) => {
       calls.push({ url: String(url), options });
-      if (String(url).includes('/payments/')) return { ok: true, json: async () => ({ id: 'pay_dup_1', status: 'CLOSED', amount: '119.00', currency: 'AED' }) };
+      if (String(url).includes('/payments/')) return { ok: true, json: async () => ({ id: 'pay_dup_1', status: 'CLOSED', amount: '135.00', currency: 'AED' }) };
       if (String(url).includes('api.resend.com')) return { ok: true, json: async () => ({ id: 'email_1' }) };
       if (String(url).includes('/rest/v1/orders')) return { ok: true, text: async () => JSON.stringify([{ id: 'order-uuid-dup', order_number: 'AJ-TABBY-DUP-1', stripe_session_id: 'tabby_pay_dup_1' }]) };
       if (String(url).includes('/rpc/process_paid_inventory')) return { ok: true, json: async () => ({}) };

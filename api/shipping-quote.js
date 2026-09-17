@@ -1,5 +1,14 @@
+// IMPORTANT: these are only a FALLBACK. getZones() below prefers the
+// shipping_zones table whenever Supabase is reachable, so in Preview AND in
+// Production the customer-facing delivery window actually comes from the
+// DATABASE. Changing AE to 7-14 here therefore does NOT by itself change
+// what customers are shown — the shipping_zones row must be updated too,
+// and that table is shared with Production.
 const fallbackZones = [
-  { code: 'AE', name_ar: 'الإمارات العربية المتحدة', country_codes: ['AE'], amount: 0, min_days: 1, max_days: 3 },
+  // APPROVED: 7-14 business days, which is what CJ's real route aging
+  // supports (the AE routes actually selected are 7-10 and 7-11 days). The
+  // previous 1-3 day window was not achievable by any available CJ route.
+  { code: 'AE', name_ar: 'الإمارات العربية المتحدة', country_codes: ['AE'], amount: 0, min_days: 7, max_days: 14 },
   { code: 'GCC', name_ar: 'دول مجلس التعاون الخليجي', country_codes: ['SA','BH','KW','OM','QA'], amount: 4500, min_days: 3, max_days: 6 },
   { code: 'MENA', name_ar: 'الشرق الأوسط وشمال أفريقيا', country_codes: ['DZ','EG','IQ','JO','LB','LY','MA','PS','SD','SY','TN','YE'], amount: 7500, min_days: 5, max_days: 10 },
   { code: 'EUROPE', name_ar: 'أوروبا', country_codes: 'AD AL AT AX BA BE BG BY CH CY CZ DE DK EE ES FI FO FR GB GG GI GR HR HU IE IM IS IT JE LI LT LU LV MC MD ME MK MT NL NO PL PT RO RS RU SE SI SJ SK SM TR UA VA'.split(' '), amount: 11000, min_days: 6, max_days: 12 },
