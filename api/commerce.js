@@ -309,11 +309,19 @@ const handleCjAuthDiagnostic = async (req, res) => {
   }
 };
 
-const CJ_DIAGNOSTIC_BLOCKED_SUBSTRINGS = ['conn/connection', 'save', 'order', 'warehouse', 'shipping'];
+// Per CJ's official docs (developers.cjdropshipping.com/en/api/api2/api/shop.html):
+// GET /product/conn/connection is a documented, distinct READ ("Query
+// Product Connection List") from the POST/DELETE forms at that same URL —
+// safe here because this diagnostic's underlying rawCjGet always issues GET,
+// never POST/DELETE, regardless of what path string is passed.
+const CJ_DIAGNOSTIC_ALLOWED_EXACT = ['/shop/product/queryPage', '/shop/product/queryDetail'];
+const CJ_DIAGNOSTIC_BLOCKED_SUBSTRINGS = ['save', 'order', 'warehouse', 'shipping'];
 const handleCjDiagnostic = async (req, res) => {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
   const path = String(req.query.path || '');
-  if (!path.startsWith('/product')) return res.status(400).json({ error: 'Diagnostic only allows /product* CJ paths' });
+  const pathOnly = path.split('?')[0];
+  const allowed = path.startsWith('/product') || CJ_DIAGNOSTIC_ALLOWED_EXACT.includes(pathOnly);
+  if (!allowed) return res.status(400).json({ error: 'Diagnostic only allows /product* or specific documented read-only /shop/product paths' });
   if (CJ_DIAGNOSTIC_BLOCKED_SUBSTRINGS.some(s => path.toLowerCase().includes(s))) {
     return res.status(400).json({ error: 'Path blocked for safety (write-adjacent)' });
   }
