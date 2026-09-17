@@ -1,4 +1,5 @@
 import { quoteShipping } from './shipping-quote.js';
+import { computeProductPricing } from '../lib/pricing.js';
 
 const stripeRequest = async (path, options = {}) => {
   const response = await fetch(`https://api.stripe.com/v1/${path}`, {
@@ -20,9 +21,18 @@ export default async function handler(req, res) {
   try {
     if (req.method === 'GET') {
       const sessionId = String(req.query.session_id || '');
-      if (!sessionId.startsWith('cs_')) return res.status(400).json({ error: 'جلسة غير صحيحة' });
-      const session = await stripeRequest(`checkout/sessions/${encodeURIComponent(sessionId)}`, { method: 'GET' });
-      return res.status(200).json({ id: session.id, payment_status: session.payment_status, order_id: session.client_reference_id });
+      const paymentIntentId = String(req.query.payment_intent_id || '');
+      if (sessionId) {
+        if (!sessionId.startsWith('cs_')) return res.status(400).json({ error: 'جلسة غير صحيحة' });
+        const session = await stripeRequest(`checkout/sessions/${encodeURIComponent(sessionId)}`, { method: 'GET' });
+        return res.status(200).json({ id: session.id, payment_status: session.payment_status, order_id: session.client_reference_id });
+      }
+      if (paymentIntentId) {
+        if (!paymentIntentId.startsWith('pi_')) return res.status(400).json({ error: 'جلسة غير صحيحة' });
+        const intent = await stripeRequest(`payment_intents/${encodeURIComponent(paymentIntentId)}`, { method: 'GET' });
+        return res.status(200).json({ id: intent.id, payment_status: intent.status === 'succeeded' ? 'paid' : intent.status, order_id: intent.metadata?.order_id || '' });
+      }
+      return res.status(400).json({ error: 'جلسة غير صحيحة' });
     }
 
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -37,8 +47,7 @@ export default async function handler(req, res) {
     const requestedItems = Object.entries(grouped).map(([variant, quantity]) => ({ variant, quantity }));
     const quantity = requestedItems.reduce((sum, item) => sum + item.quantity, 0);
     if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100) return res.status(400).json({ error: 'كمية الطلب غير صحيحة' });
-    const unitPrice = quantity >= 50 ? 18.5 : quantity >= 20 ? 389 / 20 : quantity >= 15 ? 309 / 15 : quantity >= 10 ? 219 / 10 : quantity >= 5 ? 119 / 5 : 25;
-    const productAmount = Math.round(quantity * unitPrice * 100);
+    const { productAmount } = computeProductPricing(quantity);
     if (process.env.SUPABASE_URL && process.env.SUPABASE_SECRET_KEY) {
       const inventoryResponse = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/check_inventory`, {
         method: 'POST',
@@ -68,20 +77,7 @@ export default async function handler(req, res) {
       if (authResponse.ok) userId = String((await authResponse.json()).id || '');
     }
     const origin = `https://${req.headers['x-forwarded-host'] || req.headers.host}`;
-    const params = new URLSearchParams({
-      mode: 'payment',
-      ui_mode: 'hosted_page',
-      client_reference_id: String(order.id),
-      customer_email: customerEmail,
-      'payment_intent_data[receipt_email]': customerEmail,
-      'payment_intent_data[description]': `AJLIB order ${String(order.id)}`,
-      'invoice_creation[enabled]': 'true',
-      'phone_number_collection[enabled]': 'true',
-      'line_items[0][price_data][currency]': 'aed',
-      'line_items[0][price_data][unit_amount]': String(productAmount),
-      'line_items[0][price_data][product_data][name]': `AJLIB — ${quantity} قطع`,
-      'line_items[0][price_data][product_data][description]': 'طلب مخصص حسب اللون والمقاس',
-      'line_items[0][quantity]': '1',
+    const metadataFields = {
       'metadata[order_id]': String(order.id),
       'metadata[items]': itemSummary,
       'metadata[customer_name]': String(customer.name || '').slice(0, 500),
@@ -97,7 +93,41 @@ export default async function handler(req, res) {
       'metadata[shipping_amount]': String(shipping.amount),
       'metadata[shipping_zone]': shipping.zone_code,
       'metadata[user_id]': userId,
-      'metadata[preorder]': (order.preorders||[]).map(x=>`${x.variant}:${x.preorder_eta||'سيحدد لاحقًا'}`).join(',').slice(0,500),
+      'metadata[preorder]': (order.preorders||[]).map(x=>`${x.variant}:${x.preorder_eta||'سيحدد لاحقًا'}`).join(',').slice(0,500)
+    };
+
+    // Native iOS/Android checkout (Expo app via Stripe PaymentSheet) needs a
+    // PaymentIntent client secret, not a hosted Checkout Session URL. The web
+    // storefront's hosted_page flow below is unchanged.
+    if (order.mobile === true) {
+      if (!process.env.STRIPE_PUBLISHABLE_KEY) return res.status(503).json({ error: 'الدفع عبر التطبيق غير مفعّل بعد' });
+      const intentParams = new URLSearchParams({
+        amount: String(productAmount + shipping.amount),
+        currency: 'aed',
+        receipt_email: customerEmail,
+        description: `AJLIB order ${String(order.id)}`,
+        'automatic_payment_methods[enabled]': 'true',
+        ...metadataFields
+      });
+      const intent = await stripeRequest('payment_intents', { method: 'POST', body: intentParams });
+      return res.status(200).json({ id: intent.id, clientSecret: intent.client_secret, publishableKey: process.env.STRIPE_PUBLISHABLE_KEY });
+    }
+
+    const params = new URLSearchParams({
+      mode: 'payment',
+      ui_mode: 'hosted_page',
+      client_reference_id: String(order.id),
+      customer_email: customerEmail,
+      'payment_intent_data[receipt_email]': customerEmail,
+      'payment_intent_data[description]': `AJLIB order ${String(order.id)}`,
+      'invoice_creation[enabled]': 'true',
+      'phone_number_collection[enabled]': 'true',
+      'line_items[0][price_data][currency]': 'aed',
+      'line_items[0][price_data][unit_amount]': String(productAmount),
+      'line_items[0][price_data][product_data][name]': `AJLIB — ${quantity} قطع`,
+      'line_items[0][price_data][product_data][description]': 'طلب مخصص حسب اللون والمقاس',
+      'line_items[0][quantity]': '1',
+      ...metadataFields,
       success_url: `${origin}/?payment=success&id=${encodeURIComponent(order.id)}&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/?payment=cancelled&id=${encodeURIComponent(order.id)}`
     });

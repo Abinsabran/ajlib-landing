@@ -144,6 +144,29 @@ export default async function handler(req, res) {
     if (event.type === 'checkout.session.completed' && event.data?.object?.payment_status === 'paid') {
       await Promise.all([saveOrder(event.data.object), sendOrderEmail(event.data.object), updateInventory(event.data.object)]);
     }
+    // Native Expo app checkout (PaymentSheet) confirms via PaymentIntent, not a
+    // Checkout Session — normalize it into the same shape so paid orders from
+    // the app are persisted, emailed and deduct inventory exactly like the web.
+    // IMPORTANT: a hosted Checkout Session (the web flow above) also has an
+    // underlying PaymentIntent, so this event fires for web payments too —
+    // but api/checkout-session.js only ever attaches metadata[order_id] to a
+    // PaymentIntent directly for the native branch (order.mobile === true).
+    // Web-originated intents therefore have no order_id here, so this guard
+    // is what stops every web order from being double-processed.
+    if (event.type === 'payment_intent.succeeded' && event.data?.object?.metadata?.order_id) {
+      const intent = event.data.object;
+      const normalized = {
+        id: intent.id,
+        metadata: intent.metadata || {},
+        customer_details: null,
+        customer_email: intent.receipt_email || '',
+        amount_total: intent.amount,
+        currency: intent.currency,
+        payment_intent: intent.id,
+        created: intent.created
+      };
+      await Promise.all([saveOrder(normalized), sendOrderEmail(normalized), updateInventory(normalized)]);
+    }
     return res.status(200).json({ received: true });
   } catch (error) {
     return res.status(500).json({ error: error.message || 'Webhook failed' });
