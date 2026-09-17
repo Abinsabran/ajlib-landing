@@ -356,6 +356,24 @@ const handleSchemaVerify = async (req, res) => {
 
   const table = await sb('cj_webhook_events?select=message_id,topic,received_at&limit=1');
   out.table.cj_webhook_events_readable_by_service_role = table.ok;
+  out.table.status = table.status;
+  out.table.error = table.ok ? null : (await table.text()).slice(0, 300);
+
+  // The receiver must be able to INSERT, not just read — verify with a real
+  // round-trip, then remove the probe row so no test data is left behind.
+  const probeId = `schema-verify-probe-${Date.now()}`;
+  const insert = await fetch(`${process.env.SUPABASE_URL}/rest/v1/cj_webhook_events`, {
+    method: 'POST',
+    headers: { ...auth, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+    body: JSON.stringify({ message_id: probeId, topic: 'SCHEMA_VERIFY' })
+  });
+  out.table.service_role_can_insert = insert.ok;
+  out.table.insert_status = insert.status;
+  out.table.insert_error = insert.ok ? null : (await insert.text()).slice(0, 300);
+  if (insert.ok) {
+    const cleanup = await fetch(`${process.env.SUPABASE_URL}/rest/v1/cj_webhook_events?message_id=eq.${encodeURIComponent(probeId)}`, { method: 'DELETE', headers: auth });
+    out.table.probe_row_cleaned_up = cleanup.ok;
+  }
 
   const counted = await sb('orders?select=id', { Prefer: 'count=exact', Range: '0-0' });
   out.data.orders_content_range = counted.headers.get('content-range');
@@ -364,7 +382,8 @@ const handleSchemaVerify = async (req, res) => {
   out.data.sample = sample.ok ? await sample.json() : 'unreadable';
 
   const zones = await sb('shipping_zones?select=code,min_days,max_days,active&code=eq.AE');
-  out.data.ae_shipping_zone_rows = zones.ok ? await zones.json() : 'unreadable';
+  out.data.ae_shipping_zone_status = zones.status;
+  out.data.ae_shipping_zone_rows = zones.ok ? await zones.json() : (await zones.text()).slice(0, 300);
 
   return res.status(200).json(out);
 };
