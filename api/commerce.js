@@ -5,6 +5,7 @@ import { COUNTRY_CURRENCY, currencyForCountry, convertAedFilsForDisplay } from '
 import { isTabbyPotentiallyAvailable, createCheckoutSession, verifyPayment } from '../lib/tabby-client.js';
 import { buildValidatedOrder, OrderValidationError } from '../lib/order-validation.js';
 import { persistPaidOrder } from './stripe-webhook.js';
+import { getCurrentCjProductCosts, resolveFreightAndLogistics, resolveFulfillmentVariants } from '../lib/cj-fulfillment.js';
 
 // Grouped, provider-neutral handler for the foundation endpoints added
 // alongside the existing per-feature functions (checkout-session.js,
@@ -330,13 +331,46 @@ const handleTabbyVerify = async (req, res) => {
 // saveStoreProduct/saveStoreVariantBatch/createProductConnection/
 // queryProductConnections remain available for any future re-sync need.
 
+// TEMPORARY (Phase 4 report prep, will revert): read-only diagnostic to
+// pull REAL current CJ product cost + freight/logistics numbers for one
+// representative order, so the Phase 4 report doesn't use illustrative
+// figures. No CJ order or connection write. Gated behind CJ_API_KEY as a
+// shared secret (reusing the existing server secret, not a new one) so this
+// isn't reachable by an unauthenticated caller even if the Preview bypass
+// header leaks. Never returns a CJ access token or any other secret.
+const handleCjFulfillmentDiagnostic = async (req, res) => {
+  if (!process.env.CJ_API_KEY || req.headers['x-diagnostic-key'] !== process.env.CJ_API_KEY) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  try {
+    const variant = String(req.query.variant || 'أسود-L');
+    const quantity = Number(req.query.quantity || 5);
+    const countryCode = String(req.query.country || 'AE');
+    const { resolved, fullyResolved } = resolveFulfillmentVariants([{ variant, quantity }]);
+    if (!fullyResolved) return res.status(400).json({ error: 'Unresolved variant', variant });
+    const costed = await getCurrentCjProductCosts(resolved);
+    const { availableMethods, selection } = await resolveFreightAndLogistics({ resolvedItems: resolved, destinationCountryCode: countryCode });
+    return res.status(200).json({
+      variant, quantity, countryCode,
+      cjVariantId: resolved[0].cjVariantId,
+      unitCostUSD: costed[0].unitCostUSD,
+      lineCostUSD: costed[0].lineCostUSD,
+      availableMethods: availableMethods.map(m => ({ logisticName: m.logisticName, cost: Number(m.totalPostageFee ?? m.logisticPrice) })),
+      selection
+    });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+};
+
 const HANDLERS = {
   'order-quote': handleOrderQuote,
   catalog: handleCatalog,
   currency: handleCurrency,
   'tabby-availability': handleTabbyAvailability,
   'tabby-checkout': handleTabbyCheckout,
-  'tabby-verify': handleTabbyVerify
+  'tabby-verify': handleTabbyVerify,
+  'cj-fulfillment-diagnostic': handleCjFulfillmentDiagnostic
 };
 
 export default async function handler(req, res) {
