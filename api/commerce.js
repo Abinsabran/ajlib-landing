@@ -292,13 +292,26 @@ const handleTabbyVerify = async (req, res) => {
 // they've served their purpose. rawCjGet/tabbyDiagnosticPost/tabbyRawGet
 // remain in lib/ for any future re-sync need.
 
+// TEMPORARY: reports only whether each env var is SET (boolean), never its
+// value, to confirm/deny the "SUPABASE_SECRET_KEY missing in Preview"
+// hypothesis without exposing any credential. Remove after confirming.
+const handleEnvCheck = async (req, res) => {
+  return res.status(200).json({
+    SUPABASE_URL: Boolean(process.env.SUPABASE_URL),
+    SUPABASE_PUBLISHABLE_KEY: Boolean(process.env.SUPABASE_PUBLISHABLE_KEY),
+    SUPABASE_SECRET_KEY: Boolean(process.env.SUPABASE_SECRET_KEY),
+    RESEND_API_KEY: Boolean(process.env.RESEND_API_KEY)
+  });
+};
+
 const HANDLERS = {
   'order-quote': handleOrderQuote,
   catalog: handleCatalog,
   currency: handleCurrency,
   'tabby-availability': handleTabbyAvailability,
   'tabby-checkout': handleTabbyCheckout,
-  'tabby-verify': handleTabbyVerify
+  'tabby-verify': handleTabbyVerify,
+  'env-check': handleEnvCheck
 };
 
 export default async function handler(req, res) {
