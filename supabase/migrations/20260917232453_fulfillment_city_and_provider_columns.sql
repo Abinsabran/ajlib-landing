@@ -1,5 +1,11 @@
 -- Phase 4 — structured shipping city + provider-neutral fulfillment columns.
 --
+-- Managed by the Supabase CLI (supabase/migrations). No explicit BEGIN/COMMIT:
+-- the CLI applies each migration file inside its own transaction, and a
+-- COMMIT here would close that transaction early, leaving the remaining
+-- statements running unwrapped. Every statement is idempotent regardless,
+-- so a partial application can simply be re-run.
+--
 -- SAFETY REVIEW (per the approval criteria): every statement below is
 -- strictly additive and idempotent — ADD COLUMN IF NOT EXISTS,
 -- CREATE INDEX IF NOT EXISTS, CREATE TABLE IF NOT EXISTS, COMMENT ON, plus
@@ -27,8 +33,6 @@
 -- lib/fulfillment-status.js serializeOrderForCustomer, which does not
 -- (and after this migration, still must not) select any fulfillment_*
 -- column into a customer response.
-
-begin;
 
 -- Structured destination city, kept SEPARATE from the flattened
 -- shipping_address string. The checkout form has always collected `city`
@@ -86,4 +90,3 @@ alter table public.cj_webhook_events enable row level security;
 revoke all on table public.cj_webhook_events from anon;
 revoke all on table public.cj_webhook_events from authenticated;
 
-commit;
