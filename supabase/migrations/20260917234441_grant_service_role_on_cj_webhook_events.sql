@@ -1,0 +1,30 @@
+-- Follow-up to 20260917232453: grant the server role access to the new
+-- dedup table.
+--
+-- NOT YET APPLIED — prepared for review, pending approval.
+--
+-- WHY THIS IS NEEDED
+-- Post-migration verification found that the server (which reaches Supabase
+-- with SUPABASE_SECRET_KEY, i.e. the `service_role`) is refused on the new
+-- table:
+--   GET  /rest/v1/cj_webhook_events -> 403 42501 "permission denied"
+--   POST /rest/v1/cj_webhook_events -> 403 42501 "permission denied"
+-- with PostgREST hinting "GRANT SELECT, INSERT ON public.cj_webhook_events
+-- TO service_role".
+--
+-- This is NOT caused by the RLS hardening in the previous migration: that
+-- revoked `anon` and `authenticated` only, never `service_role`. The same
+-- 403 occurs on public.shipping_zones, a table this project has never
+-- modified — so the cause is that this database does not grant
+-- `service_role` on public tables by default. public.orders works only
+-- because it carries an explicit grant from the original schema.
+--
+-- Without this grant the CJ webhook receiver cannot write its dedup row, so
+-- every delivered event would fail. Least privilege: the receiver only ever
+-- INSERTs a messageId and (for diagnostics) reads it back, so no UPDATE or
+-- DELETE is granted.
+--
+-- Still additive and idempotent: GRANT is repeatable, and it does not
+-- weaken the anon/authenticated lockdown, which stays revoked.
+
+grant select, insert on table public.cj_webhook_events to service_role;
