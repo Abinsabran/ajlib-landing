@@ -2,7 +2,7 @@ import { quoteShipping } from './shipping-quote.js';
 import { computeProductPricing, MIN_QUANTITY, MAX_QUANTITY } from '../lib/pricing.js';
 import { PRODUCTS } from '../lib/catalog.js';
 import { COUNTRY_CURRENCY, currencyForCountry, convertAedFilsForDisplay } from '../lib/currency.js';
-import { isTabbyPotentiallyAvailable, createCheckoutSession, verifyPayment } from '../lib/tabby-client.js';
+import { isTabbyPotentiallyAvailable, createCheckoutSession, verifyPayment, tabbyRawGet } from '../lib/tabby-client.js';
 import { buildValidatedOrder, OrderValidationError } from '../lib/order-validation.js';
 import { persistPaidOrder } from './stripe-webhook.js';
 
@@ -281,13 +281,24 @@ const handleTabbyVerify = async (req, res) => {
 // data and the Phase 2 report for the raw Tabby sandbox response. rawCjGet
 // and tabbyDiagnosticPost remain in lib/ for any future re-sync need.
 
+const handleTabbyVerifyDiagnostic = async (req, res) => {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+  try {
+    const result = await tabbyRawGet(`/payments/${encodeURIComponent(String(req.query.payment_id || ''))}`);
+    return res.status(200).json(result);
+  } catch (error) {
+    return res.status(502).json({ error: error.message });
+  }
+};
+
 const HANDLERS = {
   'order-quote': handleOrderQuote,
   catalog: handleCatalog,
   currency: handleCurrency,
   'tabby-availability': handleTabbyAvailability,
   'tabby-checkout': handleTabbyCheckout,
-  'tabby-verify': handleTabbyVerify
+  'tabby-verify': handleTabbyVerify,
+  'tabby-verify-diagnostic': handleTabbyVerifyDiagnostic
 };
 
 export default async function handler(req, res) {
