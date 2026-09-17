@@ -271,7 +271,13 @@ const handleTabbyVerify = async (req, res) => {
       created: Math.floor(Date.now() / 1000)
     };
 
-    await persistPaidOrder(normalized);
+    // persistPaidOrder's saveOrder now throws unless PostgREST hands back an
+    // actual persisted row for this dedup key (see api/stripe-webhook.js) —
+    // {paid:true} below is only reachable once that row is confirmed to exist.
+    const [savedOrderRow] = await persistPaidOrder(normalized);
+    if (!savedOrderRow?.id) {
+      throw new Error('Order persistence unconfirmed after upsert');
+    }
     return res.status(200).json({ paid: true, order_id: normalized.metadata.order_id });
   } catch (error) {
     if (error instanceof OrderValidationError) return res.status(error.status).json({ error: error.message });

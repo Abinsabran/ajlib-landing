@@ -51,7 +51,9 @@ const mockFetch = () => {
   globalThis.fetch = async (url, options = {}) => {
     calls.push({ url: String(url), options });
     if (String(url).includes('api.resend.com')) return { ok: true, json: async () => ({ id: 'email_1' }) };
-    if (String(url).includes('/rest/v1/orders')) return { ok: true, text: async () => '' };
+    // Real shape since the return=minimal -> return=representation fix: the
+    // upsert must hand back the persisted row, or saveOrder now throws.
+    if (String(url).includes('/rest/v1/orders')) return { ok: true, text: async () => JSON.stringify([{ id: 'order-uuid-1', order_number: 'AJ-TEST', stripe_session_id: 'stub' }]) };
     if (String(url).includes('/rpc/process_paid_inventory')) return { ok: true, json: async () => ({}) };
     throw new Error(`Unexpected fetch in test: ${url}`);
   };
@@ -130,8 +132,8 @@ test('native PaymentIntent webhook: two identical deliveries send byte-identical
       const orderBodies = ordersCalls.map(c => JSON.parse(c.options.body));
       assert.equal(orderBodies[0].stripe_session_id, 'pi_native_test_1');
       assert.equal(orderBodies[0].stripe_session_id, orderBodies[1].stripe_session_id);
-      assert.equal(ordersCalls[0].options.headers.Prefer, 'resolution=merge-duplicates,return=minimal');
-      assert.equal(ordersCalls[1].options.headers.Prefer, 'resolution=merge-duplicates,return=minimal');
+      assert.equal(ordersCalls[0].options.headers.Prefer, 'resolution=merge-duplicates,return=representation');
+      assert.equal(ordersCalls[1].options.headers.Prefer, 'resolution=merge-duplicates,return=representation');
 
       assert.equal(emailCalls.length, 2);
       assert.equal(emailCalls[0].options.headers['Idempotency-Key'], 'ajlib-order-pi_native_test_1');

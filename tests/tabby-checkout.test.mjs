@@ -112,17 +112,51 @@ test('tabby-verify rejects when Tabby\'s recorded amount does not match the reco
 });
 
 test('tabby-verify persists the order only once amount and status both check out (server-side verified)', async () => {
-  await withEnv({ TABBY_MODE: 'test', TABBY_SECRET_KEY: 'sk_test_x', SUPABASE_URL: '', SUPABASE_SECRET_KEY: '', RESEND_API_KEY: '' }, async () => {
+  await withEnv({ TABBY_MODE: 'test', TABBY_SECRET_KEY: 'sk_test_x', SUPABASE_URL: 'https://example.supabase.co', SUPABASE_SECRET_KEY: 'service_role_test', RESEND_API_KEY: 'resend_test' }, async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = async (url) => {
       if (String(url).includes('/payments/')) return { ok: true, json: async () => ({ id: 'pay_test_1', status: 'CLOSED', amount: '119.00', currency: 'AED' }) };
-      if (String(url).includes('api.resend.com')) return { ok: true, json: async () => ({ id: 'email_1' }) }; // sendOrderEmail has no env-var guard, unlike saveOrder/updateInventory
+      if (String(url).includes('api.resend.com')) return { ok: true, json: async () => ({ id: 'email_1' }) };
+      if (String(url).includes('/rest/v1/orders')) return { ok: true, text: async () => JSON.stringify([{ id: 'order-uuid-verified', order_number: 'AJ-TABBY-TEST-1', stripe_session_id: 'tabby_pay_test_1' }]) };
+      if (String(url).includes('/rpc/process_paid_inventory')) return { ok: true, json: async () => ({}) };
+      if (String(url).includes('/rpc/check_inventory')) return { ok: true, json: async () => ([]) };
+      if (String(url).includes('/rest/v1/shipping_zones')) return { ok: false };
       throw new Error(`unexpected fetch in test: ${url}`);
     };
     try {
       const res = await handler({ method: 'POST', query: { resource: 'tabby-verify' }, body: { payment_id: 'pay_test_1', order: validOrder() }, headers: {} }, makeRes());
       assert.equal(res.statusCode, 200);
       assert.equal(res.body.paid, true);
+    } finally { globalThis.fetch = originalFetch; }
+  });
+});
+
+test('THE BUG: tabby-verify must NOT report paid:true when the order upsert reports success but returns no row', async () => {
+  // Reproduces the exact real-world failure: Preview's /api/tabby-verify
+  // returned 200 {paid:true,...} for a real completed Tabby sandbox
+  // payment, but no row existed in Supabase afterward. Root cause: saveOrder
+  // used Prefer: return=minimal, so a 2xx status was trusted as proof of
+  // persistence when it proved nothing. This test fails on the pre-fix code
+  // (which returned 200 here) and passes only because saveOrder now demands
+  // an actual returned row.
+  await withEnv({ TABBY_MODE: 'test', TABBY_SECRET_KEY: 'sk_test_x', SUPABASE_URL: 'https://example.supabase.co', SUPABASE_SECRET_KEY: 'restricted_key_test', RESEND_API_KEY: 'resend_test' }, async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => {
+      if (String(url).includes('/payments/')) return { ok: true, json: async () => ({ id: 'pay_norow_1', status: 'CLOSED', amount: '119.00', currency: 'AED' }) };
+      if (String(url).includes('api.resend.com')) return { ok: true, json: async () => ({ id: 'email_1' }) };
+      // The exact failure mode: PostgREST reports 201 (ok) but the
+      // representation is empty — e.g. an RLS-restricted read-back, a key
+      // that isn't actually privileged, or any other silent no-op.
+      if (String(url).includes('/rest/v1/orders')) return { ok: true, text: async () => '[]' };
+      if (String(url).includes('/rpc/process_paid_inventory')) return { ok: true, json: async () => ({}) };
+      if (String(url).includes('/rpc/check_inventory')) return { ok: true, json: async () => ([]) };
+      if (String(url).includes('/rest/v1/shipping_zones')) return { ok: false };
+      throw new Error(`unexpected fetch in test: ${url}`);
+    };
+    try {
+      const res = await handler({ method: 'POST', query: { resource: 'tabby-verify' }, body: { payment_id: 'pay_norow_1', order: validOrder({ id: 'AJ-TABBY-NOROW-1' }) }, headers: {} }, makeRes());
+      assert.notEqual(res.statusCode, 200, 'must not report success when no row was actually persisted');
+      assert.equal(res.body.paid, undefined);
     } finally { globalThis.fetch = originalFetch; }
   });
 });
@@ -157,7 +191,7 @@ test('an email-provider failure does not prevent the order/inventory writes from
       calls.push(String(url));
       if (String(url).includes('/payments/')) return { ok: true, json: async () => ({ id: 'pay_email_fail', status: 'CLOSED', amount: '119.00', currency: 'AED' }) };
       if (String(url).includes('api.resend.com')) return { ok: false, status: 401 }; // matches the real observed failure
-      if (String(url).includes('/rest/v1/orders')) return { ok: true, text: async () => '' };
+      if (String(url).includes('/rest/v1/orders')) return { ok: true, text: async () => JSON.stringify([{ id: 'order-uuid-emailfail', order_number: 'AJ-TABBY-EMAILFAIL-1', stripe_session_id: 'tabby_pay_email_fail' }]) };
       if (String(url).includes('/rpc/process_paid_inventory')) return { ok: true, json: async () => ({}) };
       if (String(url).includes('/rpc/check_inventory')) return { ok: true, json: async () => ([]) };
       if (String(url).includes('/rest/v1/shipping_zones')) return { ok: false };
@@ -180,7 +214,7 @@ test('duplicate tabby-verify calls for the same payment send byte-identical idem
       calls.push({ url: String(url), options });
       if (String(url).includes('/payments/')) return { ok: true, json: async () => ({ id: 'pay_dup_1', status: 'CLOSED', amount: '119.00', currency: 'AED' }) };
       if (String(url).includes('api.resend.com')) return { ok: true, json: async () => ({ id: 'email_1' }) };
-      if (String(url).includes('/rest/v1/orders')) return { ok: true, text: async () => '' };
+      if (String(url).includes('/rest/v1/orders')) return { ok: true, text: async () => JSON.stringify([{ id: 'order-uuid-dup', order_number: 'AJ-TABBY-DUP-1', stripe_session_id: 'tabby_pay_dup_1' }]) };
       if (String(url).includes('/rpc/process_paid_inventory')) return { ok: true, json: async () => ({}) };
       if (String(url).includes('/rpc/check_inventory')) return { ok: true, json: async () => ([]) };
       if (String(url).includes('/rest/v1/shipping_zones')) return { ok: false }; // forces shipping-quote.js's own fallbackZones, no live rule change
@@ -201,7 +235,7 @@ test('duplicate tabby-verify calls for the same payment send byte-identical idem
       const bodies = orderCalls.map(c => JSON.parse(c.options.body));
       assert.equal(bodies[0].stripe_session_id, 'tabby_pay_dup_1');
       assert.equal(bodies[0].stripe_session_id, bodies[1].stripe_session_id);
-      assert.equal(orderCalls[0].options.headers.Prefer, 'resolution=merge-duplicates,return=minimal');
+      assert.equal(orderCalls[0].options.headers.Prefer, 'resolution=merge-duplicates,return=representation');
 
       assert.equal(emailCalls.length, 2);
       assert.equal(emailCalls[0].options.headers['Idempotency-Key'], emailCalls[1].options.headers['Idempotency-Key']);

@@ -79,13 +79,18 @@ const saveOrder = async (session) => {
     const separator = item.lastIndexOf(':');
     return { variant: separator >= 0 ? item.slice(0, separator) : item, quantity: Number(separator >= 0 ? item.slice(separator + 1) : 1) };
   });
-  const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/orders?on_conflict=stripe_session_id`, {
+  const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/orders?on_conflict=stripe_session_id&select=id,order_number,stripe_session_id`, {
     method: 'POST',
     headers: {
       apikey: process.env.SUPABASE_SECRET_KEY,
       Authorization: `Bearer ${process.env.SUPABASE_SECRET_KEY}`,
       'Content-Type': 'application/json',
-      Prefer: 'resolution=merge-duplicates,return=minimal'
+      // return=minimal previously hid this: a 2xx status here does NOT prove
+      // a row exists (e.g. an RLS-restricted SELECT on the same request can
+      // make PostgREST report success with an empty result). representation
+      // forces PostgREST to hand back the actual persisted row so we can
+      // verify it ourselves instead of trusting the HTTP status alone.
+      Prefer: 'resolution=merge-duplicates,return=representation'
     },
     body: JSON.stringify({
       order_number: metadata.order_id || session.client_reference_id || session.id,
@@ -110,10 +115,19 @@ const saveOrder = async (session) => {
       paid_at: new Date((session.created || Math.floor(Date.now() / 1000)) * 1000).toISOString()
     })
   });
+  const rawBody = await response.text();
   if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(`Order database rejected request: ${response.status} ${detail.slice(0, 300)}`);
+    throw new Error(`Order database rejected request: ${response.status} ${rawBody.slice(0, 300)}`);
   }
+  let rows;
+  try { rows = JSON.parse(rawBody); } catch { rows = null; }
+  if (!Array.isArray(rows) || rows.length === 0) {
+    // The exact bug this replaces: PostgREST returned 2xx with no row, so a
+    // caller trusting response.ok alone would believe the order was saved
+    // when it was not. Never let that be mistaken for success again.
+    throw new Error(`Order upsert reported success but returned no row for stripe_session_id=${session.id}`);
+  }
+  return rows[0];
 };
 
 const updateInventory = async (session) => {
