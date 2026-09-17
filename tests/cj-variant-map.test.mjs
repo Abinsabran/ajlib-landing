@@ -5,12 +5,9 @@ import { serializeOrderForCustomer } from '../lib/fulfillment-status.js';
 
 // Phase 2 requires: all 16 AJLIB variants mapped, no duplicates, no guessed
 // mappings, and no CJ metadata ever reaching a customer-facing response.
-// As of this commit, CJ_VARIANT_MAP is intentionally EMPTY — the read-only
-// discovery diagnostic (api/commerce.js, resource=cj-diagnostic) has not yet
-// returned confirmed CJ variant data (see the Phase 2 report for why). This
-// test suite locks in the STRUCTURAL guarantees (no duplicates, no unknown
-// keys, no leakage) that must hold both now and once real data lands, and
-// documents exactly what's missing rather than asserting a false "done".
+// CJ_VARIANT_MAP is now populated from a confirmed, read-only
+// GET /product/query?productSku=CJYD1589152 response (see the file header
+// and the Phase 2 report for the Blue->Navy visual-confirmation note).
 
 test('there are exactly 16 AJLIB sellable variant keys defined', () => {
   assert.equal(AJLIB_VARIANT_KEYS.length, 16);
@@ -33,16 +30,28 @@ test('every mapped entry uses one of the 16 known AJLIB variant keys (no stray/g
   }
 });
 
-test('missingVariants() accurately reflects what has not been confirmed yet', () => {
-  const missing = missingVariants();
-  assert.equal(missing.length, AJLIB_VARIANT_KEYS.length - CJ_VARIANT_MAP.length);
-  for (const key of missing) assert.ok(AJLIB_VARIANT_KEYS.includes(key));
+test('all 16 AJLIB variants are mapped — nothing missing', () => {
+  assert.equal(isFullyMapped(), true);
+  assert.deepEqual(missingVariants(), []);
 });
 
-test('cjVariantFor returns null instead of a guess for an unmapped variant', () => {
-  if (isFullyMapped()) return; // nothing left to check once fully populated
-  const [unmapped] = missingVariants();
-  assert.equal(cjVariantFor(unmapped), null);
+test('every mapped entry has a non-empty CJ variant id and SKU (no placeholder/guessed values)', () => {
+  for (const entry of CJ_VARIANT_MAP) {
+    assert.ok(/^\d+$/.test(entry.cjVariantId), `${entry.ajlibKey} has a non-numeric/placeholder cjVariantId`);
+    assert.ok(/^CJYD/.test(entry.cjVariantSku), `${entry.ajlibKey} has an unexpected cjVariantSku`);
+  }
+});
+
+test('cjVariantFor resolves each of the 16 real AJLIB keys to its confirmed CJ variant', () => {
+  for (const key of AJLIB_VARIANT_KEYS) {
+    const entry = cjVariantFor(key);
+    assert.ok(entry, `${key} did not resolve`);
+    assert.equal(entry.ajlibKey, key);
+  }
+});
+
+test('cjVariantFor returns null for an unrecognized key instead of guessing', () => {
+  assert.equal(cjVariantFor('أحمر-M'), null); // "Red" isn't a real AJLIB color
 });
 
 test('CJ metadata never leaks through the customer-facing order serializer', () => {

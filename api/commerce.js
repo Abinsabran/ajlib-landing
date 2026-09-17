@@ -2,10 +2,9 @@ import { quoteShipping } from './shipping-quote.js';
 import { computeProductPricing, MIN_QUANTITY, MAX_QUANTITY } from '../lib/pricing.js';
 import { PRODUCTS } from '../lib/catalog.js';
 import { COUNTRY_CURRENCY, currencyForCountry, convertAedFilsForDisplay } from '../lib/currency.js';
-import { isTabbyPotentiallyAvailable, createCheckoutSession, verifyPayment, tabbyDiagnosticPost } from '../lib/tabby-client.js';
+import { isTabbyPotentiallyAvailable, createCheckoutSession, verifyPayment } from '../lib/tabby-client.js';
 import { buildValidatedOrder, OrderValidationError } from '../lib/order-validation.js';
 import { persistPaidOrder } from './stripe-webhook.js';
-import { rawCjGet } from '../lib/cj-client.js';
 
 // Grouped, provider-neutral handler for the foundation endpoints added
 // alongside the existing per-feature functions (checkout-session.js,
@@ -276,43 +275,11 @@ const handleTabbyVerify = async (req, res) => {
   }
 };
 
-// ---- cj-diagnostic (TEMPORARY, Phase 2 read-only variant discovery only) --
-// GET-only, restricted to /product* CJ paths so it can never reach an
-// order/warehouse/packaging endpoint. Never returns the CJ access token —
-// only whatever product/variant data CJ's API itself returns. Remove once
-// lib/cj-variant-map.js has been populated from confirmed results.
-
-const CJ_DIAGNOSTIC_ALLOWED_PREFIXES = ['/product'];
-
-const handleCjDiagnostic = async (req, res) => {
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
-  const path = String(req.query.path || '/product/query?pid=CJYD1589152');
-  if (!CJ_DIAGNOSTIC_ALLOWED_PREFIXES.some(prefix => path.startsWith(prefix))) {
-    return res.status(400).json({ error: 'Diagnostic only allows read-only /product* CJ paths' });
-  }
-  try {
-    const result = await rawCjGet(path);
-    return res.status(200).json(result);
-  } catch (error) {
-    return res.status(502).json({ error: error.message });
-  }
-};
-
-// ---- tabby-diagnostic (TEMPORARY, Phase 2 sandbox verification only) -----
-// Creates a real Tabby SANDBOX checkout attempt (test mode only, guarded by
-// TABBY_MODE) and returns Tabby's raw response so the actual API shape can
-// be confirmed instead of assumed. No money moves in test mode.
-
-const handleTabbyDiagnostic = async (req, res) => {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  if (process.env.TABBY_MODE !== 'test') return res.status(503).json({ error: 'Tabby diagnostic only runs in test mode' });
-  try {
-    const result = await tabbyDiagnosticPost('/checkout', req.body || {});
-    return res.status(200).json(result);
-  } catch (error) {
-    return res.status(502).json({ error: error.message });
-  }
-};
+// cj-diagnostic and tabby-diagnostic (used to confirm CJ's real variant data
+// and Tabby's real sandbox response shape during Phase 2) have been removed
+// now that both are confirmed — see lib/cj-variant-map.js for the resulting
+// data and the Phase 2 report for the raw Tabby sandbox response. rawCjGet
+// and tabbyDiagnosticPost remain in lib/ for any future re-sync need.
 
 const HANDLERS = {
   'order-quote': handleOrderQuote,
@@ -320,9 +287,7 @@ const HANDLERS = {
   currency: handleCurrency,
   'tabby-availability': handleTabbyAvailability,
   'tabby-checkout': handleTabbyCheckout,
-  'tabby-verify': handleTabbyVerify,
-  'cj-diagnostic': handleCjDiagnostic,
-  'tabby-diagnostic': handleTabbyDiagnostic
+  'tabby-verify': handleTabbyVerify
 };
 
 export default async function handler(req, res) {
