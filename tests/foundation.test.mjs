@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { computeProductPricing, MIN_QUANTITY, MAX_QUANTITY } from '../lib/pricing.js';
+import { computeProductPricing, computeUnitPrice, computeSavingsPercent, BASELINE_UNIT_PRICE, MIN_QUANTITY, MAX_QUANTITY } from '../lib/pricing.js';
 import { allVariants, PRODUCTS, COLORS, SIZES } from '../lib/catalog.js';
 import { COUNTRY_CURRENCY, currencyForCountry, convertAedFilsForDisplay } from '../lib/currency.js';
 import { customerStatusFor, serializeOrderForCustomer, CUSTOMER_STATUS } from '../lib/fulfillment-status.js';
@@ -16,8 +16,35 @@ test('pricing: matches the approved launch tiers exactly', () => {
   assert.equal(computeProductPricing(15).productAmount, 39900);
   assert.equal(computeProductPricing(20).productAmount, 51900);
   assert.equal(computeProductPricing(50).productAmount, 124900);
-  // Sub-5 is UNCHANGED and was not part of the approved tiers.
-  assert.equal(computeProductPricing(1).productAmount, 2500);
+});
+
+test('pricing: the old 25 AED/unit sub-5 anchor is gone — 5 is the floor rate', () => {
+  assert.equal(BASELINE_UNIT_PRICE, 27);
+  // Anything below the minimum prices at the 5-piece rate, never at 25.
+  for (const qty of [1, 2, 3, 4]) {
+    assert.equal(computeUnitPrice(qty), 27, `qty ${qty} must not price below the 5-piece rate`);
+  }
+});
+
+test('savings are computed from the ladder and never negative, zero, or overstated', () => {
+  // 5 is the baseline, so it has no saving to advertise.
+  assert.equal(computeSavingsPercent(5), 0);
+  // 10 is only 0.37% cheaper per unit than the baseline (26.90 vs 27.00),
+  // which is below the 1% display threshold — so it advertises nothing
+  // rather than rounding a third of a percent up into a "1%" claim.
+  assert.equal(computeSavingsPercent(10), 0);
+
+  for (const qty of [15, 20, 50]) {
+    const saving = computeSavingsPercent(qty);
+    assert.ok(saving >= 1, `qty ${qty} should advertise a real saving, got ${saving}`);
+    // Derived from the live ladder, never a hardcoded percentage.
+    assert.equal(saving, Math.round((1 - computeUnitPrice(qty) / BASELINE_UNIT_PRICE) * 100));
+  }
+
+  // No quantity may ever produce a negative badge.
+  for (let qty = 1; qty <= MAX_QUANTITY; qty += 1) {
+    assert.ok(computeSavingsPercent(qty) >= 0, `qty ${qty} produced a negative saving`);
+  }
 });
 
 test('pricing: unit price converges to 24.98 at and above 50', () => {
@@ -35,8 +62,8 @@ test('pricing: the volume ladder never inverts across the approved tiers', () =>
   }
 });
 
-test('pricing: quantity bounds match the server-enforced range (1-100)', () => {
-  assert.equal(MIN_QUANTITY, 1);
+test('pricing: quantity bounds match the server-enforced range (5-100)', () => {
+  assert.equal(MIN_QUANTITY, 5);
   assert.equal(MAX_QUANTITY, 100);
 });
 
@@ -124,5 +151,42 @@ test('storefront pricing matches the server-authoritative ladder exactly', async
       Math.abs(flexibleUnitPrice(qty) - computeProductPricing(qty).unitPrice) < 1e-9,
       `qty ${qty}: storefront ${flexibleUnitPrice(qty)} vs server ${computeProductPricing(qty).unitPrice}`
     );
+  }
+});
+
+test('the storefront no longer carries the hardcoded 25 AED compare-at anchor', async () => {
+  const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+  assert.ok(!html.includes('pack-old-price'), 'the struck-through compare-at price must be gone');
+  assert.ok(!/1-unit\/25/.test(html), 'the hardcoded /25 discount anchor must be gone');
+  assert.ok(!html.includes('>25 درهم للقطعة<'), 'the 25 AED/unit copy must be gone');
+});
+
+test('the storefront enforces the same 5-unit minimum as the server', async () => {
+  const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+  const bounds = html.match(/const MIN_QTY=(\d+),MAX_QTY=(\d+);/);
+  assert.ok(bounds, 'storefront quantity bounds not found');
+  assert.equal(Number(bounds[1]), MIN_QUANTITY, 'storefront minimum must match the server');
+  assert.equal(Number(bounds[2]), MAX_QUANTITY, 'storefront maximum must match the server');
+  // The quantity input itself must not offer anything below the minimum.
+  const input = html.match(/id="qty"[^>]*min="(\d+)"[^>]*value="(\d+)"/);
+  assert.ok(input, 'quantity input not found');
+  assert.equal(Number(input[1]), MIN_QUANTITY);
+  assert.ok(Number(input[2]) >= MIN_QUANTITY);
+});
+
+test('storefront savings badges match the server calculation exactly, with no badge below 1%', async () => {
+  const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+  const expr = html.match(/savings=\(1-unit\/baseline\)\*100,discount=savings>=1\?Math\.round\(savings\):0/);
+  assert.ok(expr, 'storefront savings expression does not match the agreed rule');
+
+  // Re-run the storefront's own rule against every pack and compare to the server.
+  const fn = html.match(/function flexibleUnitPrice\(n\)\{([^}]*)\}/);
+  const flexibleUnitPrice = new Function('n', fn[1]);
+  const baseline = flexibleUnitPrice(MIN_QUANTITY);
+  for (const qty of [5, 10, 15, 20, 50]) {
+    const savings = (1 - flexibleUnitPrice(qty) / baseline) * 100;
+    const shown = savings >= 1 ? Math.round(savings) : 0;
+    assert.equal(shown, computeSavingsPercent(qty), `qty ${qty}: storefront badge ${shown}% vs server ${computeSavingsPercent(qty)}%`);
+    assert.ok(shown >= 0, 'a negative badge must be impossible');
   }
 });
