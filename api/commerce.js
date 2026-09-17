@@ -5,6 +5,10 @@ import { COUNTRY_CURRENCY, currencyForCountry, convertAedFilsForDisplay } from '
 import { isTabbyPotentiallyAvailable, createCheckoutSession, verifyPayment } from '../lib/tabby-client.js';
 import { buildValidatedOrder, OrderValidationError } from '../lib/order-validation.js';
 import { persistPaidOrder } from './stripe-webhook.js';
+import { saveStoreProduct, saveStoreVariantBatch, createProductConnection, queryProductConnections } from '../lib/cj-client.js';
+import { buildSaveProductPayload, buildSaveVariantBatchPayload, buildCreateConnectionPayload, AJLIB_DEFAULT_SHOP_ID, RECOMMENDED_DEFAULT_LOGISTICS, platformVariantId } from '../lib/cj-store-connection.js';
+import { CJ_VARIANT_MAP } from '../lib/cj-variant-map.js';
+import { colorCodeFromNameAr } from '../lib/catalog.js';
 
 // Grouped, provider-neutral handler for the foundation endpoints added
 // alongside the existing per-feature functions (checkout-session.js,
@@ -318,11 +322,90 @@ const handleTabbyVerify = async (req, res) => {
 // (id 2609160939212912600) is used, distinguished from the other entry
 // which carries a stray leading Arabic diacritic in its name.
 
+// ---- TEMPORARY, one-time, EXPLICITLY APPROVED CJ API-store connection
+// execution (Save Product -> Save Variant Batch -> Create Product
+// Connection). Requires POST + an explicit confirmation string so no GET,
+// prefetch, or accidental retry can trigger it. Stops immediately if any
+// step fails; never creates a CJ order; never touches packaging/sticker
+// config. Remove once executed and verified.
+
+const AJLIB_IMAGE_BASE = 'https://www.ajlib.store/images/products';
+const imageForVariant = (entry) => `${AJLIB_IMAGE_BASE}/boxer-${colorCodeFromNameAr(entry.color)}.jpg`;
+
+const handleCjExecuteConnection = async (req, res) => {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (req.body?.confirm !== 'EXECUTE_CJ_CONNECTION') {
+    return res.status(400).json({ error: 'Explicit confirm:"EXECUTE_CJ_CONNECTION" required in body' });
+  }
+
+  const steps = {};
+
+  // 1. Save Product — priceMin/priceMax from lib/pricing.js's real formula
+  // (18.5 AED at qty>=50, 25 AED at qty=1), not invented.
+  const productPayload = buildSaveProductPayload({
+    image: `${AJLIB_IMAGE_BASE}/boxer-black.jpg`,
+    priceMin: 18.5,
+    priceMax: 25,
+    priceCurrency: 'AED'
+  });
+  const productResult = await saveStoreProduct(productPayload);
+  steps.saveProduct = { status: productResult.status, code: productResult.body?.code, result: productResult.body?.result, message: productResult.body?.message };
+  if (productResult.body?.result !== true) {
+    return res.status(502).json({ stoppedAt: 'saveProduct', steps });
+  }
+
+  // 2. Save Variant Batch — shopPrice=25 AED matches the site's own listed
+  // per-piece reference price; per-variant image matches the real color.
+  const variantPayload = buildSaveVariantBatchPayload({
+    imageFor: imageForVariant,
+    shopPrice: 25,
+    shopPriceCurrency: 'AED',
+    weightKg: 0.18
+  });
+  const variantResult = await saveStoreVariantBatch(variantPayload);
+  const variantData = Array.isArray(variantResult.body?.data) ? variantResult.body.data : [];
+  const allSucceeded = variantData.length === CJ_VARIANT_MAP.length && variantData.every(v => v.saveSuccess === true);
+  steps.saveVariantBatch = {
+    status: variantResult.status,
+    code: variantResult.body?.code,
+    totalReported: variantData.length,
+    allSucceeded,
+    failures: variantData.filter(v => v.saveSuccess !== true)
+  };
+  if (!allSucceeded) {
+    return res.status(502).json({ stoppedAt: 'saveVariantBatch', steps });
+  }
+
+  // 3. Create Product Connection — defaults already resolved (defaultArea 1,
+  // DHL Official, shopId, CN/China source, AE/UAE target market).
+  const connectionPayload = buildCreateConnectionPayload({ defaultArea: 1, logistics: RECOMMENDED_DEFAULT_LOGISTICS });
+  const connectionResult = await createProductConnection(connectionPayload);
+  steps.createConnection = { status: connectionResult.status, code: connectionResult.body?.code, result: connectionResult.body?.data, message: connectionResult.body?.message };
+  if (connectionResult.body?.data !== true) {
+    return res.status(502).json({ stoppedAt: 'createConnection', steps });
+  }
+
+  return res.status(200).json({ success: true, steps });
+};
+
+// Read-only verification — confirms the connections now exist.
+const handleCjVerifyConnection = async (req, res) => {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+  try {
+    const result = await queryProductConnections({ shopId: AJLIB_DEFAULT_SHOP_ID, platformProductId: 'ajlib-ice-silk-boxer-briefs' });
+    return res.status(200).json(result);
+  } catch (error) {
+    return res.status(502).json({ error: error.message });
+  }
+};
+
 const HANDLERS = {
   'order-quote': handleOrderQuote,
   catalog: handleCatalog,
   currency: handleCurrency,
   'tabby-availability': handleTabbyAvailability,
+  'cj-execute-connection': handleCjExecuteConnection,
+  'cj-verify-connection': handleCjVerifyConnection,
   'tabby-checkout': handleTabbyCheckout,
   'tabby-verify': handleTabbyVerify
 };
