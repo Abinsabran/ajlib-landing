@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { AJLIB_VARIANT_KEYS, CJ_VARIANT_MAP, CJ_PRODUCT_FAMILY_PID, CJ_PRODUCT_FAMILY_SKU } from '../lib/cj-variant-map.js';
-import { buildSaveProductPayload, buildSaveVariantBatchPayload, buildCreateConnectionPayload, platformVariantId, AJLIB_PLATFORM_PRODUCT_ID } from '../lib/cj-store-connection.js';
+import { buildSaveProductPayload, buildSaveVariantBatchPayload, buildCreateConnectionPayload, platformVariantId, AJLIB_PLATFORM_PRODUCT_ID, LOGISTICS_METHODS_COMMON_TO_ALL_SUPPORTED_DESTINATIONS } from '../lib/cj-store-connection.js';
 import { serializeOrderForCustomer } from '../lib/fulfillment-status.js';
 
 // Phase 3: validates the exact payload shapes CJ's official docs specify for
@@ -99,4 +99,27 @@ test('no CJ metadata ever leaks through the customer-facing order serializer, in
   for (const key of Object.keys(serialized)) assert.ok(!key.toLowerCase().startsWith('cj'), `CJ field leaked: ${key}`);
   assert.ok(!serializedJson.includes(CJ_PRODUCT_FAMILY_PID));
   assert.ok(!serializedJson.includes(CJ_VARIANT_MAP[0].cjVariantId));
+});
+
+test('defaultArea=1 works end to end in a built payload (confirmed live: China is the only warehouse for this product)', () => {
+  const payload = buildCreateConnectionPayload({ defaultArea: 1, logistics: 'CJPacket Postal' });
+  assert.equal(payload.defaultArea, 1);
+});
+
+test('exactly two logistics methods are documented as common to all 8 supported destinations — no guessed third option', () => {
+  assert.deepEqual([...LOGISTICS_METHODS_COMMON_TO_ALL_SUPPORTED_DESTINATIONS].sort(), ['CJPacket Postal', 'DHL Official']);
+});
+
+test('Create Connection payload accepts either confirmed common logistics method without altering the rest of the structure', () => {
+  for (const logistics of LOGISTICS_METHODS_COMMON_TO_ALL_SUPPORTED_DESTINATIONS) {
+    const payload = buildCreateConnectionPayload({ defaultArea: 1, logistics });
+    assert.equal(payload.logistics, logistics);
+    assert.equal(payload.variantList.length, 16);
+  }
+});
+
+test('Create Connection payload never includes a targetCountry/targetCountryCode — AJLIB serves multiple markets, not one', () => {
+  const payload = buildCreateConnectionPayload({ defaultArea: 1, logistics: 'CJPacket Postal' });
+  assert.equal('targetCountry' in payload, false);
+  assert.equal('targetCountryCode' in payload, false);
 });
