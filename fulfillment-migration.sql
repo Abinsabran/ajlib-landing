@@ -1,6 +1,11 @@
--- Phase 4 — provider-neutral fulfillment columns for public.orders.
+-- Phase 4 — structured shipping city + provider-neutral fulfillment columns.
 --
--- NOT EXECUTED. Prepared for review only.
+-- SAFETY REVIEW (per the approval criteria): every statement below is
+-- strictly additive and idempotent — ADD COLUMN IF NOT EXISTS,
+-- CREATE INDEX IF NOT EXISTS, CREATE TABLE IF NOT EXISTS, COMMENT ON.
+-- There is no DROP, no destructive or type-changing ALTER, no rename, no
+-- removal, and no statement that deletes or rewrites existing order data.
+-- Re-running it is a no-op.
 --
 -- IMPORTANT: unlike Vercel Preview vs Production (separate deployments),
 -- there is only ONE Supabase project/database referenced throughout this
@@ -19,6 +24,18 @@
 -- column into a customer response.
 
 begin;
+
+-- Structured destination city, kept SEPARATE from the flattened
+-- shipping_address string. The checkout form has always collected `city`
+-- as a required field (index.html) and both payment paths passed it around,
+-- but neither persisted it as its own column — it was only interpolated
+-- into the shipping_address text. CJ's createOrderV2 requires shippingCity
+-- as a distinct field, so it must be stored structurally from here on.
+-- Nullable on purpose: orders placed BEFORE this migration genuinely do not
+-- have it, and must be blocked from automatic fulfillment rather than have
+-- a city guessed out of the address string.
+alter table public.orders
+  add column if not exists shipping_city text;
 
 alter table public.orders
   add column if not exists fulfillment_provider text,

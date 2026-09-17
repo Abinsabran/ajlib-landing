@@ -3,9 +3,12 @@ import assert from 'node:assert/strict';
 import {
   resolveFulfillmentVariants, getCurrentCjProductCosts, resolveFreightAndLogistics,
   evaluateFulfillmentMargin, alreadyHasFulfillmentOrder, cjOrderNumberFor, buildCjOrderPayload,
-  prepareFulfillment, FulfillmentBlockedError
+  prepareFulfillment, FulfillmentBlockedError,
+  parseCjBalanceUSD, evaluateBalanceSufficiency, aedToUsd,
+  CJ_PAY_TYPE_BALANCE, CJ_PAY_TYPE_CREATE_ONLY
 } from '../lib/cj-fulfillment.js';
-import { selectLogisticsMethod, PREFERRED_LOGISTICS_ORDER } from '../lib/logistics-policy.js';
+import { readFile } from 'node:fs/promises';
+import { selectLogisticsMethod, maxAgingDays, MIN_ACCEPTABLE_MARGIN_PERCENT, CJ_BALANCE_LOW_WARNING_AED } from '../lib/logistics-policy.js';
 import { PROVIDER_STATUS_MAP, nextInternalStatusFromCjStatus, serializeOrderForCustomer } from '../lib/fulfillment-status.js';
 import { AJLIB_VARIANT_KEYS } from '../lib/cj-variant-map.js';
 
@@ -80,24 +83,67 @@ test('logistics selection never hardcodes CJPacket for a large order — respect
   assert.equal(result.method, 'DHL Official'); // correctly picks the only real option, never CJPacket Postal
 });
 
-test('logistics selection reports ONLY_METHOD_AVAILABLE when the sole option is not even in the preference list', () => {
+test('logistics selection reports ONLY_METHOD_AVAILABLE when there is a single valid route', () => {
   const result = selectLogisticsMethod([{ logisticName: 'Qfulfillment A line', logisticPrice: 24, totalPostageFee: 24 }], { countryCode: 'US' });
   assert.equal(result.method, 'Qfulfillment A line');
   assert.equal(result.reason, 'ONLY_METHOD_AVAILABLE');
 });
 
-test('logistics selection prefers a cheaper method when both a preferred and non-preferred option are available', () => {
+test('logistics selection picks the CHEAPEST available method, not a hardcoded CJPacket Postal preference', () => {
+  // Real live AE qty-5 data: Eub is cheapest, Postal is mid-priced. The old
+  // preference-list policy picked Postal and silently cost ~21pp of margin.
   const availability = [
-    { logisticName: 'DHL Official', logisticPrice: 118, totalPostageFee: 118 },
-    { logisticName: 'CJPacket Postal', logisticPrice: 17, totalPostageFee: 17 }
+    { logisticName: 'CJPacket Postal', logisticPrice: 17.96, totalPostageFee: 17.96, logisticAging: '7-12' },
+    { logisticName: 'CJPacket Eub', logisticPrice: 10.52, totalPostageFee: 10.52, logisticAging: '7-12' },
+    { logisticName: 'DHL Official', logisticPrice: 118.44, totalPostageFee: 118.44, logisticAging: '3-6' }
   ];
   const result = selectLogisticsMethod(availability, { countryCode: 'AE' });
-  assert.equal(result.method, 'CJPacket Postal');
-  assert.equal(result.reason, 'PREFERRED_MATCH');
+  assert.equal(result.method, 'CJPacket Eub');
+  assert.equal(result.cost, 10.52);
+  assert.equal(result.reason, 'CHEAPEST_AVAILABLE');
 });
 
-test('PREFERRED_LOGISTICS_ORDER never hardcodes a single "the" method — it is a preference list, not a fixed choice', () => {
-  assert.ok(PREFERRED_LOGISTICS_ORDER.length > 1);
+test('DHL is selected automatically when it is the cheapest valid route (e.g. a large Oman order)', () => {
+  const result = selectLogisticsMethod([{ logisticName: 'DHL Official', logisticPrice: 130, totalPostageFee: 130, logisticAging: '3-6' }], { countryCode: 'OM' });
+  assert.equal(result.method, 'DHL Official');
+});
+
+test('a delivery promise filters out routes that are too slow, and picks the cheapest that still meets it', () => {
+  const availability = [
+    { logisticName: 'CJPacket Eub', logisticPrice: 10.52, totalPostageFee: 10.52, logisticAging: '7-12' },
+    { logisticName: 'DHL Official', logisticPrice: 118.44, totalPostageFee: 118.44, logisticAging: '3-6' }
+  ];
+  const result = selectLogisticsMethod(availability, { countryCode: 'AE', maxDeliveryDays: 6 });
+  assert.equal(result.method, 'DHL Official'); // Eub's 12-day upper bound breaks a 6-day promise
+  assert.equal(result.reason, 'ONLY_METHOD_MEETS_PROMISE');
+});
+
+test('when NO available route can meet the delivery promise, selection blocks instead of silently over-promising', () => {
+  const availability = [
+    { logisticName: 'CJPacket Eub', logisticPrice: 10.52, totalPostageFee: 10.52, logisticAging: '7-12' },
+    { logisticName: 'DHL Official', logisticPrice: 118.44, totalPostageFee: 118.44, logisticAging: '3-6' }
+  ];
+  const result = selectLogisticsMethod(availability, { countryCode: 'AE', maxDeliveryDays: 3 });
+  assert.equal(result.method, null);
+  assert.equal(result.reason, 'NO_METHOD_MEETS_DELIVERY_PROMISE');
+  // The fastest real option is reported as context for a human decision,
+  // but must NOT be presented as a selection.
+  assert.equal(result.fastestAvailable.method, 'DHL Official');
+});
+
+test('a method with unparseable aging is never assumed fast enough to meet a promise', () => {
+  const result = selectLogisticsMethod(
+    [{ logisticName: 'Mystery Line', logisticPrice: 5, totalPostageFee: 5, logisticAging: '' }],
+    { countryCode: 'AE', maxDeliveryDays: 10 }
+  );
+  assert.equal(result.method, null);
+  assert.equal(result.reason, 'NO_METHOD_MEETS_DELIVERY_PROMISE');
+});
+
+test('maxAgingDays reads the UPPER bound of CJ\'s real aging strings', () => {
+  assert.equal(maxAgingDays({ logisticAging: '7-12' }), 12);
+  assert.equal(maxAgingDays({ logisticAging: '10' }), 10);
+  assert.equal(maxAgingDays({ logisticAging: null }), null);
 });
 
 // ---- COST SAFETY -------------------------------------------------------------
@@ -161,6 +207,106 @@ test('margin guard approves when the real margin meets a configured threshold', 
   assert.equal(result.reason, 'MARGIN_OK');
 });
 
+// ---- APPROVED 20% MARGIN THRESHOLD ------------------------------------------
+
+test('the approved default margin threshold is 20% and is applied when no explicit threshold is passed', () => {
+  assert.equal(MIN_ACCEPTABLE_MARGIN_PERCENT, 20);
+  // Real AE qty-5 numbers with the OLD CJPacket Postal pick: 10.5% margin.
+  const withPostal = evaluateFulfillmentMargin({
+    productAmountCollectedFils: 11900, shippingAmountCollectedFils: 0,
+    cjProductCostUSD: 11.05, cjShippingCostUSD: 17.96
+  });
+  assert.equal(withPostal.approved, false, 'a 10.5% margin must be blocked by the 20% threshold');
+  assert.equal(withPostal.reason, 'MARGIN_BELOW_THRESHOLD');
+
+  // Same order with the cheapest-available pick (CJPacket Eub): ~33%.
+  const withEub = evaluateFulfillmentMargin({
+    productAmountCollectedFils: 11900, shippingAmountCollectedFils: 0,
+    cjProductCostUSD: 11.05, cjShippingCostUSD: 10.52
+  });
+  assert.equal(withEub.approved, true);
+  assert.ok(withEub.details.marginPercent > 20);
+});
+
+test('a known additional fulfillment/customization cost is included in the margin calculation', () => {
+  const base = evaluateFulfillmentMargin({
+    productAmountCollectedFils: 11900, shippingAmountCollectedFils: 0,
+    cjProductCostUSD: 11.05, cjShippingCostUSD: 10.52
+  });
+  const withExtra = evaluateFulfillmentMargin({
+    productAmountCollectedFils: 11900, shippingAmountCollectedFils: 0,
+    cjProductCostUSD: 11.05, cjShippingCostUSD: 10.52, additionalFulfillmentCostUSD: 5
+  });
+  assert.equal(withExtra.details.fulfillmentCostUSD - base.details.fulfillmentCostUSD, 5);
+  assert.ok(withExtra.details.marginPercent < base.details.marginPercent);
+});
+
+// ---- CJ BALANCE PREFLIGHT ----------------------------------------------------
+
+test('an unrecognized CJ balance response shape yields null and blocks — never treated as zero or unlimited', () => {
+  assert.equal(parseCjBalanceUSD({ data: { somethingUnexpected: 5 } }), null);
+  assert.equal(parseCjBalanceUSD({}), null);
+  const result = evaluateBalanceSufficiency({ balanceUSD: null, requiredUSD: 29.01 });
+  assert.equal(result.sufficient, false);
+  assert.equal(result.reason, 'CJ_BALANCE_UNAVAILABLE');
+});
+
+test('sufficient CJ balance approves the order and reports what would remain', () => {
+  const result = evaluateBalanceSufficiency({ balanceUSD: 300, requiredUSD: 29.01 });
+  assert.equal(result.sufficient, true);
+  assert.equal(result.reason, 'BALANCE_OK');
+  assert.ok(Math.abs(result.remainingAfterUSD - 270.99) < 0.001);
+});
+
+test('insufficient CJ balance blocks automatic fulfillment (no auto top-up, order preserved for review)', () => {
+  const result = evaluateBalanceSufficiency({ balanceUSD: 10, requiredUSD: 29.01 });
+  assert.equal(result.sufficient, false);
+  assert.equal(result.reason, 'INSUFFICIENT_CJ_BALANCE');
+});
+
+test('the low-balance warning fires on what REMAINS after the order, at the approved ~500 AED threshold', () => {
+  assert.equal(CJ_BALANCE_LOW_WARNING_AED, 500);
+  // Leaves ~400 AED equivalent -> warn.
+  const low = evaluateBalanceSufficiency({ balanceUSD: aedToUsd(400) + 29.01, requiredUSD: 29.01 });
+  assert.equal(low.sufficient, true);
+  assert.equal(low.lowBalanceWarning, true);
+  // Leaves ~1200 AED equivalent (inside the approved 1000-1500 target) -> no warning.
+  const healthy = evaluateBalanceSufficiency({ balanceUSD: aedToUsd(1200) + 29.01, requiredUSD: 29.01 });
+  assert.equal(healthy.lowBalanceWarning, false);
+});
+
+test('prepareFulfillment blocks with INSUFFICIENT_CJ_BALANCE before building any payload', async () => {
+  await withEnv({ CJ_API_KEY: 'test' }, async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => {
+      const u = String(url);
+      if (u.includes('getAccessToken')) return { ok: true, json: async () => ({ data: { accessToken: 'tok', accessTokenExpiryDate: new Date(Date.now() + 3600_000).toISOString() } }) };
+      if (u.includes('/product/conn/connection')) return { ok: true, json: async () => ({ data: { list: [{ cjVariantId: '1581871544320667650', cjPrice: '2.21' }] } }) };
+      if (u.includes('/logistic/freightCalculate')) return { ok: true, json: async () => ({ data: [{ logisticName: 'CJPacket Eub', logisticPrice: 10.52, totalPostageFee: 10.52, logisticAging: '7-12' }] }) };
+      if (u.includes('/shopping/balance/getBalance')) return { ok: true, json: async () => ({ data: { balance: 1.00 } }) };
+      throw new Error(`unexpected fetch: ${u}`);
+    };
+    try {
+      await assert.rejects(
+        () => prepareFulfillment({
+          order_number: 'AJ-BAL-1', items: [{ variant: 'أسود-L', quantity: 5 }],
+          shipping_city: 'دبي', shipping_country_code: 'AE', product_amount: 11900, shipping_amount: 0
+        }),
+        (err) => err instanceof FulfillmentBlockedError && err.reason === 'INSUFFICIENT_CJ_BALANCE'
+      );
+    } finally { globalThis.fetch = originalFetch; }
+  });
+});
+
+test('the CJ wallet is never spent directly — no payBalance endpoint exists anywhere in the client', async () => {
+  const clientSource = await readFile(new URL('../lib/cj-client.js', import.meta.url), 'utf8');
+  // Comments may *name* the write endpoints to explain why they're absent;
+  // what must not exist is an actual request built against one.
+  const code = clientSource.replace(/\/\/[^\n]*/g, '');
+  assert.ok(!/payBalance/.test(code), 'payBalance/payBalanceV2 must never be called from this codebase');
+  assert.ok(code.includes('balance/getBalance'), 'read-only balance query should be present');
+});
+
 // ---- IDEMPOTENCY ---------------------------------------------------------------
 
 test('an order that already has a fulfillment reference is never fulfilled twice', async () => {
@@ -185,7 +331,22 @@ test('buildCjOrderPayload uses orderNumber as CJ\'s documented idempotency key',
     shippingCity: 'دبي', shippingCustomerName: 'Test', shippingAddress: 'x'
   });
   assert.equal(payload.orderNumber, 'AJLIB-AJ-000123');
-  assert.equal(payload.payType, 3); // "order only" — never triggers a CJ-side charge from this pipeline
+});
+
+// ---- payType (CJ Balance operating model) -----------------------------------
+
+test('automatic fulfillment uses payType=2 (CJ Balance), never payType=3', () => {
+  assert.equal(CJ_PAY_TYPE_BALANCE, 2);
+  assert.equal(CJ_PAY_TYPE_CREATE_ONLY, 3);
+  const payload = buildCjOrderPayload({
+    ajlibOrderNumber: 'AJ-000123', resolvedItems: [{ cjVariantId: '123', quantity: 5 }],
+    logisticName: 'CJPacket Eub', shippingCountryCode: 'AE', shippingCity: 'دبي',
+    shippingCustomerName: 'Test', shippingAddress: 'x'
+  });
+  assert.equal(payload.payType, 2);
+  // payType=3 would create an order inside CJ that is never paid — exactly
+  // the silent-failure mode the approved operating model forbids.
+  assert.notEqual(payload.payType, CJ_PAY_TYPE_CREATE_ONLY);
 });
 
 test('an unresolved variant blocks fulfillment before any freight/cost call is made', async () => {
@@ -330,4 +491,61 @@ test('two concurrent prepareFulfillment calls for the same not-yet-fulfilled ord
   const b = cjOrderNumberFor(READY_ORDER_ROW.order_number);
   assert.equal(a, b);
   assert.equal(a, 'AJLIB-AJ-DUP-1');
+});
+
+// ---- STRUCTURED shipping_city (both providers) -------------------------------
+// The checkout form has always collected `city` as a required field; the gap
+// was that neither payment path PERSISTED it as its own column — it was only
+// interpolated into the flattened shipping_address string.
+
+test('the Stripe checkout path sends city as its own metadata field, not only inside the flattened address', async () => {
+  const source = await readFile(new URL('../api/checkout-session.js', import.meta.url), 'utf8');
+  assert.ok(source.includes("'metadata[city]'"), 'Stripe metadata must carry a structured city');
+});
+
+test('the Tabby verify path normalizes city into the same metadata shape as Stripe', async () => {
+  const source = await readFile(new URL('../api/commerce.js', import.meta.url), 'utf8');
+  const start = source.indexOf('const normalized = {');
+  const normalizedBlock = source.slice(start, source.indexOf('customer_details', start));
+  assert.ok(/\bcity:\s*String\(validated\.customer\.city/.test(normalizedBlock), 'Tabby metadata must carry a structured city');
+});
+
+test('the single shared persistence path writes shipping_city for BOTH providers', async () => {
+  const source = await readFile(new URL('../api/stripe-webhook.js', import.meta.url), 'utf8');
+  assert.ok(/shipping_city:\s*metadata\.city/.test(source), 'saveOrder must persist the structured city');
+  // saveOrder is the one function both providers go through (persistPaidOrder),
+  // so neither path can drift from the other.
+  assert.ok(source.includes('export const persistPaidOrder'));
+});
+
+test('a legacy order with no shipping_city is blocked from automatic fulfillment, never guessed from the address', async () => {
+  const legacyOrder = {
+    order_number: 'AJ-LEGACY-1',
+    items: [{ variant: 'أسود-L', quantity: 5 }],
+    shipping_address: '1 Test St, دبي, دبي, الإمارات, 00000', // city IS in here — must still not be used
+    shipping_city: null,
+    shipping_country_code: 'AE', product_amount: 11900, shipping_amount: 0
+  };
+  let cjCalls = 0;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => { cjCalls += 1; throw new Error('no CJ call should happen for a legacy order'); };
+  try {
+    await assert.rejects(
+      () => prepareFulfillment(legacyOrder),
+      (err) => err instanceof FulfillmentBlockedError && err.reason === 'MISSING_SHIPPING_CITY'
+    );
+    assert.equal(cjCalls, 0);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test('the CJ payload uses the STORED structured city, not anything parsed out of the address string', () => {
+  const payload = buildCjOrderPayload({
+    ajlibOrderNumber: 'AJ-1', resolvedItems: [{ cjVariantId: '1', quantity: 1 }],
+    logisticName: 'CJPacket Eub', shippingCountryCode: 'AE',
+    shippingCity: 'أبوظبي', shippingAddress: '1 Test St, دبي, الإمارات',
+    shippingCustomerName: 'Test'
+  });
+  // The address string mentions دبي; the structured city is أبوظبي. The
+  // payload must reflect the stored field, with no inference from the address.
+  assert.equal(payload.shippingCity, 'أبوظبي');
 });

@@ -103,6 +103,10 @@ const saveOrder = async (session) => {
       shipping_country_code: metadata.country_code || null,
       shipping_country_name: metadata.country_name || null,
       shipping_region: metadata.region || null,
+      // Structured city — the single shared persistence path for BOTH Stripe
+      // and Tabby (api/commerce.js tabby-verify normalizes into this same
+      // metadata shape), so neither provider can drift from the other.
+      shipping_city: metadata.city || null,
       shipping_postal_code: metadata.postal_code || null,
       items,
       product_amount: Number(metadata.product_amount || 0),
