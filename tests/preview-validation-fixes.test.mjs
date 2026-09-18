@@ -234,7 +234,7 @@ const reviewWorld = ({ balance = 0 } = {}) => {
     if (u.includes('/rest/v1/orders') && options.method === 'PATCH') { patches.push(JSON.parse(options.body)); return { ok: true, status: 204, text: async () => '' }; }
     if (u.includes('getAccessToken')) return { ok: true, json: async () => ({ data: { accessToken: 't', accessTokenExpiryDate: new Date(Date.now() + 3600_000).toISOString() } }) };
     if (u.includes('/product/conn/connection')) return { ok: true, json: async () => ({ code: 200, result: true, data: { list: [{ cjVariantId: '1581871544320667650', cjPrice: '2.21' }] } }) };
-    if (u.includes('/logistic/freightCalculate')) return { ok: true, json: async () => ({ code: 200, result: true, data: [{ logisticName: 'CJPacket Ordinary', totalPostageFee: 23.15, logisticAging: '7-10' }] }) };
+    if (u.includes('/logistic/freightCalculate')) return { ok: true, json: async () => ({ code: 200, result: true, data: [{ logisticName: 'CJPacket Liquid Line', totalPostageFee: 23.15, logisticAging: '7-10' }] }) };
     if (u.includes('/shopping/pay/getBalance')) return { ok: true, json: async () => ({ code: 200, result: true, data: { amount: balance, freezeAmount: 0, noWithdrawalAmount: 0 } }) };
     throw new Error(`unexpected fetch: ${u}`);
   };
@@ -260,7 +260,7 @@ test('an INSUFFICIENT_CJ_BALANCE block persists the selected route, amount requi
       const p = patches[0];
       assert.equal(p.fulfillment_status, FULFILLMENT_STATE.REVIEW_REQUIRED);
       assert.equal(p.fulfillment_error, 'INSUFFICIENT_CJ_BALANCE');
-      assert.equal(p.fulfillment_logistics_method, 'CJPacket Ordinary', 'the chosen route must be kept');
+      assert.equal(p.fulfillment_logistics_method, 'CJPacket Liquid Line', 'the chosen route must be kept');
       assert.equal(p.fulfillment_currency, 'USD');
       assert.ok(p.fulfillment_last_sync_at);
       // product 10 x 2.21 + freight 23.15 + sticker 10 x 0.02 = 45.45

@@ -352,7 +352,40 @@ const handleTabbyVerify = async (req, res) => {
 // saveStoreProduct/saveStoreVariantBatch/createProductConnection/
 // queryProductConnections remain available for any future re-sync need.
 
+// ---- TEMPORARY read-only route probe (UAE 5/10, US 10). REMOVE this round ----
+// Preview only. Freight calculation + the real selection policy; nothing else.
+const ROUTE_PROBE_MIX = { ae5: [['أسود-L', 5]], ae10: null, us10: null };
+const FIRST_ORDER_MIX = [['أسود-L', 2], ['أسود-XL', 2], ['كحلي-L', 1], ['كحلي-XL', 1], ['رمادي-L', 1], ['رمادي-XL', 1], ['أبيض-L', 1], ['أبيض-XL', 1]];
+const handleRouteProbe = async (req, res) => {
+  if (process.env.VERCEL_ENV !== 'preview') return res.status(404).json({ error: 'Unknown resource' });
+  const { calculateFreight } = await import('./_lib/cj-client.js');
+  const { resolveFulfillmentVariants } = await import('./_lib/cj-fulfillment.js');
+  const { selectLogisticsMethod, maxAgingDays } = await import('./_lib/logistics-policy.js');
+  const scenario = String(req.query.scenario || '');
+  if (!(scenario in ROUTE_PROBE_MIX)) return res.status(400).json({ error: 'scenario must be ae5, ae10 or us10' });
+  const country = scenario.startsWith('us') ? 'US' : 'AE';
+  const mix = ROUTE_PROBE_MIX[scenario] || FIRST_ORDER_MIX;
+  const { resolved, fullyResolved, unresolved } = resolveFulfillmentVariants(mix.map(([variant, quantity]) => ({ variant, quantity })));
+  if (!fullyResolved) return res.status(400).json({ error: 'unresolved', unresolved });
+  try {
+    const zone = await quoteShipping(country);
+    const freight = await calculateFreight({ startCountryCode: 'CN', endCountryCode: country, products: resolved.map(r => ({ vid: r.cjVariantId, quantity: r.quantity })) });
+    const body = freight.body || {};
+    return res.status(200).json({
+      scenario, country, units: resolved.reduce((s, r) => s + r.quantity, 0),
+      resolved: resolved.map(r => ({ variant: r.variant, vid: r.cjVariantId, quantity: r.quantity })),
+      promise: { min: zone.min_days, max: zone.max_days },
+      cjCode: body.code ?? null, cjMessage: Number(body.code) === 200 ? undefined : body.message,
+      methods: Array.isArray(body.data) ? body.data.map(m => ({ logisticName: m.logisticName, logisticAging: m.logisticAging, totalPostageFee: m.totalPostageFee ?? m.logisticPrice })) : [],
+      selection: selectLogisticsMethod(body.data || [], { countryCode: country, maxDeliveryDays: zone.max_days })
+    });
+  } catch (error) {
+    return res.status(502).json({ error: String(error.message || error).slice(0, 200) });
+  }
+};
+
 const HANDLERS = {
+  'route-probe': handleRouteProbe,
   'order-quote': handleOrderQuote,
   catalog: handleCatalog,
   currency: handleCurrency,

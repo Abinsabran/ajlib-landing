@@ -86,10 +86,7 @@ test('route selection honours the approved 7-14 day window using real AE aging d
   assert.notEqual(sel.method, 'CJPacket Eub Special Line');
   // DHL fits the window but is ruinous; it must not win on speed either.
   assert.notEqual(sel.method, 'DHL Official');
-  // CJPacket Liquid Line ($13.25) is a liquids channel, excluded for apparel.
-  assert.notEqual(sel.method, 'CJPacket Liquid Line');
-  assert.equal(sel.method, 'CJPacket Ordinary');
-  assert.equal(sel.cost, 16.19);
+  assert.equal(sel.method, 'CJPacket Liquid Line');
   assert.equal(sel.reason, 'CHEAPEST_MEETING_PROMISE');
 });
 

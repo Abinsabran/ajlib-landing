@@ -93,24 +93,14 @@ export const CJ_BALANCE_LOW_WARNING_AED = Number(process.env.CJ_BALANCE_LOW_WARN
 export const CJ_BALANCE_TARGET_MIN_AED = 300;
 export const CJ_BALANCE_TARGET_MAX_AED = 500;
 
-// Methods that are never appropriate for AJLIB's ordinary apparel and must
-// never be auto-selected, even when cheapest. Exact names go in the list;
-// whole CHANNEL TYPES are matched by pattern, because CJ returns many
-// variants of them (live US quote, 2026-09-18: "CJPacket Liquid US",
-// "CJPacket Pure Electricity", "YunExpress Sensitive", "CJPacket Sea",
-// "CJPacket USPS Remote", "CJPacket Ordinary Oversize Line", ...).
+// Methods that must never be auto-selected, by EXACT name only. Empty: every
+// route CJ's live freight API returns for AJLIB's exact product, quantity and
+// destination is treated as valid for it. Routes are deliberately NOT
+// rejected by words in their name (e.g. CJPacket Liquid Line is a real,
+// cheapest-compliant UAE route for this product — approved 2026-09-18 to stay
+// eligible). Add an exact name here only for a specific, approved reason.
 export const EXCLUDED_LOGISTICS_METHODS = Object.freeze([]);
-export const EXCLUDED_LOGISTICS_PATTERNS = Object.freeze([
-  /liquid/i,          // liquids
-  /electric/i,        // battery / electronics channels
-  /sensitive/i,       // sensitive-goods channels (incl. "LX Sensitive Plant")
-  /\bsea\b/i,         // sea freight
-  /remote/i,          // remote-area surcharge channels
-  /oversize|over ?length/i, // oversized-parcel channels
-  /\bplant\b/i        // plant/biological channels
-]);
-export const isExcludedLogisticsMethod = (name, exactList = EXCLUDED_LOGISTICS_METHODS) =>
-  exactList.includes(name) || EXCLUDED_LOGISTICS_PATTERNS.some(pattern => pattern.test(String(name || '')));
+export const isExcludedLogisticsMethod = (name, exactList = EXCLUDED_LOGISTICS_METHODS) => exactList.includes(name);
 
 // Per-market overrides: excludedMethods, maxDeliveryDays, and
 // preferredMethods (tried first, in order, when available and inside the

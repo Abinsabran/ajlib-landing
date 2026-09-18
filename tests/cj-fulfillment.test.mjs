@@ -662,13 +662,12 @@ test('with AE\'s real published promise (max 3 days) no live CJ route qualifies 
   assert.equal(strict.method, null);
   assert.equal(strict.reason, 'NO_METHOD_MEETS_DELIVERY_PROMISE');
 
-  // If the promise were 10 days, the only qualifying APPAREL route is DHL:
-  // CJPacket Liquid Line (7-10) is a liquids channel and is excluded, and
-  // CJPacket Ordinary's 11-day upper bound misses. Recorded so the effect of
-  // that (unapproved) commercial change is explicit rather than assumed.
+  // If the promise were extended to 10 days, CJPacket Liquid Line becomes
+  // the cheapest qualifying route — recorded here so the effect of that
+  // (unapproved) commercial change is explicit rather than assumed.
   const relaxed = selectLogisticsMethod(liveAeMethods, { countryCode: 'AE', maxDeliveryDays: 10 });
-  assert.equal(relaxed.method, 'DHL Official');
-  assert.equal(relaxed.cost, 118.44);
+  assert.equal(relaxed.method, 'CJPacket Liquid Line');
+  assert.equal(relaxed.cost, 13.25);
 });
 
 // ---- MARGIN BAND (25% auto / 20-25% review / <20% block) --------------------
