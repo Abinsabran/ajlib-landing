@@ -47,7 +47,7 @@ const world = ({ create, orders = [], balance = 500 } = {}) => {
     if (u.includes('/rest/v1/orders') && options.method === 'PATCH') return { ok: true, status: 204, text: async () => '' };
     if (u.includes('getAccessToken')) return { ok: true, json: async () => ({ data: { accessToken: 't', accessTokenExpiryDate: new Date(Date.now() + 3600_000).toISOString() } }) };
     if (u.includes('/product/conn/connection')) return { ok: true, json: async () => ({ code: 200, result: true, data: { list: [{ cjVariantId: '1581871544320667650', cjPrice: '2.21' }] } }) };
-    if (u.includes('/logistic/freightCalculate')) return { ok: true, json: async () => ({ code: 200, result: true, data: [{ logisticName: 'CJPacket Liquid Line', totalPostageFee: 23.15, logisticAging: '7-10' }] }) };
+    if (u.includes('/logistic/freightCalculate')) return { ok: true, json: async () => ({ code: 200, result: true, data: [{ logisticName: 'CJPacket Ordinary', totalPostageFee: 23.15, logisticAging: '7-10' }] }) };
     if (u.includes('/shopping/pay/getBalance')) return { ok: true, json: async () => ({ code: 200, result: true, data: { amount: balance, freezeAmount: 0, noWithdrawalAmount: 0 } }) };
     if (u.includes('/shopping/order/list')) return { ok: true, json: async () => ({ code: 200, result: true, data: { list: orders } }) };
     if (u.includes('/shopping/order/createOrderV2')) {

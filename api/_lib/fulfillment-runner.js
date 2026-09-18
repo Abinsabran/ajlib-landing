@@ -25,7 +25,11 @@ import { prepareFulfillment, FulfillmentBlockedError } from './cj-fulfillment.js
 // describe the window between "customer paid" and "sent to CJ".
 export const FULFILLMENT_STATE = Object.freeze({
   READY_FOR_CJ: 'READY_FOR_CJ',
-  REVIEW_REQUIRED: 'REVIEW_REQUIRED'
+  REVIEW_REQUIRED: 'REVIEW_REQUIRED',
+  // Claimed by the admin submit action while createOrderV2 is in flight.
+  // Only one order may hold it at a time; a row left here after an
+  // unexpected failure stays blocked for manual reconciliation, never retried.
+  SUBMITTING: 'SUBMITTING'
 });
 
 // Reasons that mean "a human should look at this", as opposed to a genuine
@@ -71,7 +75,30 @@ export const runFulfillmentPreparation = async (orderRow, { maxDeliveryDays } = 
   if (alreadyPrepared(orderRow)) {
     return { ran: false, outcome: 'ALREADY_PREPARED', state: orderRow.fulfillment_status };
   }
+  return prepareAndRecord(orderRow, { maxDeliveryDays });
+};
 
+// States from which an admin may re-run preparation: never prepared, held
+// for review (e.g. INSUFFICIENT_CJ_BALANCE before the wallet was funded), or
+// already READY_FOR_CJ (refresh live cost/freight right before submitting).
+// Never once a CJ order exists, and never while a submission is in flight.
+export const REPREPARABLE_STATES = Object.freeze([null, FULFILLMENT_STATE.REVIEW_REQUIRED, FULFILLMENT_STATE.READY_FOR_CJ]);
+
+// Admin-triggered re-preparation. Same pipeline and same recording as the
+// payment-time run; the only difference is that it is allowed to run again
+// for an order that was already prepared once.
+export const reprepareFulfillment = async (orderRow, { maxDeliveryDays } = {}) => {
+  if (!orderRow?.id) return { ran: false, outcome: 'NO_ORDER_ROW' };
+  if (orderRow.fulfillment_external_order_id) {
+    return { ran: false, outcome: 'ALREADY_SUBMITTED', cjOrderId: orderRow.fulfillment_external_order_id };
+  }
+  if (!REPREPARABLE_STATES.includes(orderRow.fulfillment_status ?? null)) {
+    return { ran: false, outcome: 'NOT_REPREPARABLE', state: orderRow.fulfillment_status };
+  }
+  return prepareAndRecord(orderRow, { maxDeliveryDays });
+};
+
+const prepareAndRecord = async (orderRow, { maxDeliveryDays } = {}) => {
   try {
     const prepared = await prepareFulfillment(orderRow, { maxDeliveryDays });
 

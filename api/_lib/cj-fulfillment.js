@@ -477,37 +477,50 @@ export const prepareFulfillment = async (orderRow, {
   const cjProductCostUSD = costed.reduce((sum, item) => sum + item.lineCostUSD, 0);
 
   const destinationCountryCode = orderRow.shipping_country_code;
-  const { availableMethods, selection } = await resolveFreightAndLogistics({ resolvedItems: resolved, destinationCountryCode, maxDeliveryDays });
-  if (!selection.method) {
-    throw new FulfillmentBlockedError('NO_LOGISTICS_AVAILABLE', { destinationCountryCode, availableMethods, selection });
+  const { availableMethods, selection: offeredSelection } = await resolveFreightAndLogistics({ resolvedItems: resolved, destinationCountryCode, maxDeliveryDays });
+  if (!offeredSelection.method) {
+    throw new FulfillmentBlockedError('NO_LOGISTICS_AVAILABLE', { destinationCountryCode, availableMethods, selection: offeredSelection });
   }
 
+  const unitCount = resolved.reduce((sum, item) => sum + item.quantity, 0);
+  const customizationPerUnitUSD = additionalFulfillmentCostUSD ?? CJ_CUSTOMIZATION_COST_USD_PER_UNIT;
   // What CJ will actually deduct from the wallet for this order: product +
   // freight + per-unit customization (the sticker is a CJ service, so CJ
   // bills it). The payment processor's fee is deliberately NOT included —
   // that is paid to Stripe/Tabby, never to CJ. This single figure is used for
   // the balance preflight and is what an operator sees as "amount required".
-  const unitCount = resolved.reduce((sum, item) => sum + item.quantity, 0);
-  const customizationPerUnitUSD = additionalFulfillmentCostUSD ?? CJ_CUSTOMIZATION_COST_USD_PER_UNIT;
-  const requiredUSD = cjProductCostUSD + selection.cost + (customizationPerUnitUSD * unitCount);
+  const assess = (candidate) => ({
+    selection: candidate,
+    requiredUSD: cjProductCostUSD + candidate.cost + (customizationPerUnitUSD * unitCount),
+    margin: evaluateFulfillmentMargin({
+      productAmountCollectedFils: orderRow.product_amount || 0,
+      shippingAmountCollectedFils: orderRow.shipping_amount || 0,
+      cjProductCostUSD,
+      cjShippingCostUSD: candidate.cost,
+      aedToUsdRate,
+      minAcceptableMarginPercent,
+      unitCount,
+      // Which provider actually collected the money determines the real fee.
+      provider: String(orderRow.stripe_session_id || '').startsWith('tabby_') ? 'tabby' : 'stripe',
+      customizationCostPerUnitUSD: customizationPerUnitUSD
+    })
+  });
+
+  // A market's preferred route (e.g. YunExpress Ordinary for the US) is used
+  // only while it keeps the order in the approved margin band; otherwise the
+  // cheapest route inside the delivery promise is re-assessed instead.
+  let chosen = assess(offeredSelection);
+  if (!chosen.margin.approved && offeredSelection.fallback) {
+    const fallback = assess({ ...offeredSelection.fallback, reason: 'PREFERRED_MISSED_MARGIN_FALLBACK', preferredMissed: offeredSelection.method });
+    if (fallback.margin.approved) chosen = fallback;
+  }
+  const { selection, requiredUSD, margin } = chosen;
 
   // Everything already calculated by this point. Attached to any block that
   // happens from here on, so a REVIEW_REQUIRED order still tells an operator
   // which route was chosen and what it would cost — instead of discarding it.
   const reviewContext = { logistics: selection, requiredUSD, unitCount };
 
-  const margin = evaluateFulfillmentMargin({
-    productAmountCollectedFils: orderRow.product_amount || 0,
-    shippingAmountCollectedFils: orderRow.shipping_amount || 0,
-    cjProductCostUSD,
-    cjShippingCostUSD: selection.cost,
-    aedToUsdRate,
-    minAcceptableMarginPercent,
-    unitCount,
-    // Which provider actually collected the money determines the real fee.
-    provider: String(orderRow.stripe_session_id || '').startsWith('tabby_') ? 'tabby' : 'stripe',
-    customizationCostPerUnitUSD: customizationPerUnitUSD
-  });
   if (!margin.approved) {
     // REVIEW and BLOCK are distinguished so an operator can tell a
     // thin-but-viable order from a genuinely loss-making one.

@@ -89,7 +89,7 @@ const mockWorld = ({ cjBalance = 0, savedRow = savedOrderRow() } = {}) => {
     // CJ
     if (u.includes('getAccessToken')) return { ok: true, json: async () => ({ data: { accessToken: 'tok', accessTokenExpiryDate: new Date(Date.now() + 3600_000).toISOString() } }) };
     if (u.includes('/product/conn/connection')) return { ok: true, json: async () => ({ code: 200, result: true, data: { list: [{ cjVariantId: '1581871544320667650', cjPrice: '2.21' }] } }) };
-    if (u.includes('/logistic/freightCalculate')) return { ok: true, json: async () => ({ code: 200, result: true, data: [{ logisticName: 'CJPacket Liquid Line', totalPostageFee: 13.25, logisticAging: '7-10' }] }) };
+    if (u.includes('/logistic/freightCalculate')) return { ok: true, json: async () => ({ code: 200, result: true, data: [{ logisticName: 'CJPacket Ordinary', totalPostageFee: 13.25, logisticAging: '7-10' }] }) };
     if (u.includes('/shopping/pay/getBalance')) return { ok: true, json: async () => ({ code: 200, result: true, data: { amount: cjBalance, freezeAmount: 0, noWithdrawalAmount: 0 } }) };
 
     throw new Error(`unexpected fetch: ${u}`);
@@ -115,7 +115,7 @@ test('a paid Stripe event triggers fulfillment preparation exactly once', async 
       assert.equal(patches.length, 1, 'exactly one fulfillment write');
       assert.equal(patches[0].fulfillment_status, FULFILLMENT_STATE.READY_FOR_CJ);
       assert.equal(patches[0].fulfillment_provider, 'cj');
-      assert.equal(patches[0].fulfillment_logistics_method, 'CJPacket Liquid Line');
+      assert.equal(patches[0].fulfillment_logistics_method, 'CJPacket Ordinary');
     } finally { restore(); }
   });
 });
@@ -309,7 +309,7 @@ test('the fulfillment fields written are internal-only and never surface to cust
     status: 'shipped', currency: 'aed', tracking_number: 'TRACK1',
     fulfillment_provider: 'cj', fulfillment_status: FULFILLMENT_STATE.READY_FOR_CJ,
     fulfillment_external_order_number: 'AJLIB-AJ-FULFIL-1',
-    fulfillment_logistics_method: 'CJPacket Liquid Line',
+    fulfillment_logistics_method: 'CJPacket Ordinary',
     fulfillment_cost: 25.51, fulfillment_currency: 'USD',
     fulfillment_error: 'INSUFFICIENT_CJ_BALANCE'
   };

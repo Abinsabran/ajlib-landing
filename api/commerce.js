@@ -5,6 +5,7 @@ import { COUNTRY_CURRENCY, currencyForCountry, convertAedFilsForDisplay } from '
 import { isTabbyPotentiallyAvailable, createCheckoutSession, verifyPayment } from './_lib/tabby-client.js';
 import { buildValidatedOrder, OrderValidationError } from './_lib/order-validation.js';
 import { persistPaidOrder } from './stripe-webhook.js';
+import { handleAdminFulfillment } from './_lib/admin-fulfillment.js';
 
 // Grouped, provider-neutral handler for the foundation endpoints added
 // alongside the existing per-feature functions (checkout-session.js,
@@ -23,7 +24,8 @@ const RESOURCE_BY_PATH = {
   '/api/order-quote': 'order-quote',
   '/api/catalog': 'catalog',
   '/api/currency': 'currency',
-  '/api/tabby-availability': 'tabby-availability'
+  '/api/tabby-availability': 'tabby-availability',
+  '/api/admin-fulfillment': 'admin-fulfillment'
 };
 
 const resolveResource = (req) => {
@@ -356,7 +358,9 @@ const HANDLERS = {
   currency: handleCurrency,
   'tabby-availability': handleTabbyAvailability,
   'tabby-checkout': handleTabbyCheckout,
-  'tabby-verify': handleTabbyVerify
+  'tabby-verify': handleTabbyVerify,
+  // Admin-only (is_admin() checked inside, before any order is read).
+  'admin-fulfillment': handleAdminFulfillment
 };
 
 export default async function handler(req, res) {

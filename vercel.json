@@ -14,7 +14,8 @@
     { "source": "/api/currency", "destination": "/api/commerce?resource=currency" },
     { "source": "/api/tabby-availability", "destination": "/api/commerce?resource=tabby-availability" },
     { "source": "/api/tabby-checkout", "destination": "/api/commerce?resource=tabby-checkout" },
-    { "source": "/api/tabby-verify", "destination": "/api/commerce?resource=tabby-verify" }
+    { "source": "/api/tabby-verify", "destination": "/api/commerce?resource=tabby-verify" },
+    { "source": "/api/admin-fulfillment", "destination": "/api/commerce?resource=admin-fulfillment" }
   ],
   "headers": [
     {

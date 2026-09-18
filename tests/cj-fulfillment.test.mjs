@@ -271,15 +271,20 @@ test('insufficient CJ balance blocks automatic fulfillment (no auto top-up, orde
   assert.equal(result.reason, 'INSUFFICIENT_CJ_BALANCE');
 });
 
-test('the low-balance warning fires on what REMAINS after the order, at the approved ~500 AED threshold', () => {
-  assert.equal(CJ_BALANCE_LOW_WARNING_AED, 500);
-  // Leaves ~400 AED equivalent -> warn.
-  const low = evaluateBalanceSufficiency({ balanceUSD: aedToUsd(400) + 29.01, requiredUSD: 29.01 });
+test('the low-balance warning fires on what REMAINS after the order, at the approved 150 AED threshold — and never blocks', () => {
+  assert.equal(CJ_BALANCE_LOW_WARNING_AED, 150);
+  // Leaves ~100 AED equivalent -> warn, but the order is still affordable.
+  const low = evaluateBalanceSufficiency({ balanceUSD: aedToUsd(100) + 50.84, requiredUSD: 50.84 });
   assert.equal(low.sufficient, true);
+  assert.equal(low.reason, 'BALANCE_OK');
   assert.equal(low.lowBalanceWarning, true);
-  // Leaves ~1200 AED equivalent (inside the approved 1000-1500 target) -> no warning.
-  const healthy = evaluateBalanceSufficiency({ balanceUSD: aedToUsd(1200) + 29.01, requiredUSD: 29.01 });
+  // Leaves ~400 AED equivalent (inside the approved 300-500 funding) -> no warning.
+  const healthy = evaluateBalanceSufficiency({ balanceUSD: aedToUsd(400) + 50.84, requiredUSD: 50.84 });
   assert.equal(healthy.lowBalanceWarning, false);
+  // One cent short blocks, whatever the warning says.
+  const short = evaluateBalanceSufficiency({ balanceUSD: 50.83, requiredUSD: 50.84 });
+  assert.equal(short.sufficient, false);
+  assert.equal(short.reason, 'INSUFFICIENT_CJ_BALANCE');
 });
 
 test('prepareFulfillment blocks with INSUFFICIENT_CJ_BALANCE before building any payload', async () => {
@@ -657,12 +662,13 @@ test('with AE\'s real published promise (max 3 days) no live CJ route qualifies 
   assert.equal(strict.method, null);
   assert.equal(strict.reason, 'NO_METHOD_MEETS_DELIVERY_PROMISE');
 
-  // If the promise were extended to 10 days, CJPacket Liquid Line becomes
-  // the cheapest qualifying route — recorded here so the effect of that
-  // (unapproved) commercial change is explicit rather than assumed.
+  // If the promise were 10 days, the only qualifying APPAREL route is DHL:
+  // CJPacket Liquid Line (7-10) is a liquids channel and is excluded, and
+  // CJPacket Ordinary's 11-day upper bound misses. Recorded so the effect of
+  // that (unapproved) commercial change is explicit rather than assumed.
   const relaxed = selectLogisticsMethod(liveAeMethods, { countryCode: 'AE', maxDeliveryDays: 10 });
-  assert.equal(relaxed.method, 'CJPacket Liquid Line');
-  assert.equal(relaxed.cost, 13.25);
+  assert.equal(relaxed.method, 'DHL Official');
+  assert.equal(relaxed.cost, 118.44);
 });
 
 // ---- MARGIN BAND (25% auto / 20-25% review / <20% block) --------------------

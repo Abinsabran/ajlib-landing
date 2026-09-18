@@ -317,6 +317,36 @@ export const getFulfillmentOrderStatus = async (cjOrderId) => {
   return body.data || null;
 };
 
+// Throttled variants used by the admin tracking sync. Both are read-only and
+// return { status, body } so a CJ error envelope (HTTP 200 with code != 200,
+// e.g. rate limiting) is never mistaken for "no data".
+//
+// GET /shopping/order/getOrderDetail?orderId= (as above).
+export const getOrderDetail = async (cjOrderId) => throttleCj(async () => {
+  const accessToken = await getAccessToken();
+  const response = await fetch(`${CJ_BASE_URL}/shopping/order/getOrderDetail?orderId=${encodeURIComponent(cjOrderId)}`, {
+    method: 'GET',
+    headers: { 'CJ-Access-Token': accessToken }
+  });
+  const body = await response.json().catch((e) => ({ parseError: e.message }));
+  return { status: response.status, body };
+});
+
+// GET /logistic/trackInfo?trackNumber= — CJ's official "2.1 Get Tracking
+// Information" (developers.cjdropshipping.com/en/api/api2/api/logistic.html,
+// checked 2026-09-18: not marked deprecated). `data` is an ARRAY of
+// { trackingNumber, logisticName, trackingFrom, trackingTo, deliveryDay,
+//   deliveryTime, trackingStatus, lastMileCarrier, lastTrackNumber }.
+export const getTrackInfo = async (trackNumber) => throttleCj(async () => {
+  const accessToken = await getAccessToken();
+  const response = await fetch(`${CJ_BASE_URL}/logistic/trackInfo?trackNumber=${encodeURIComponent(trackNumber)}`, {
+    method: 'GET',
+    headers: { 'CJ-Access-Token': accessToken }
+  });
+  const body = await response.json().catch((e) => ({ parseError: e.message }));
+  return { status: response.status, body };
+});
+
 // Phase 4: confirmed real endpoint via CJ's official docs —
 // POST /api2.0/v1/shopping/order/createOrderV2. `orderNumber` is documented
 // as CJ's own idempotency key (duplicate submissions with the same

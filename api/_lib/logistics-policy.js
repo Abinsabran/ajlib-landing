@@ -82,25 +82,49 @@ export const classifyMargin = (marginPercent) => {
   return MARGIN_BANDS.BLOCK;
 };
 
-// Approved CJ Balance operating model. Target operating balance is
-// ~1000-1500 AED equivalent; warn below ~500 AED. Automatic top-up is
-// deliberately NOT implemented. Thresholds are AED because that is how the
-// business holds them; comparison against CJ's USD payable happens in
-// cj-fulfillment.js using the existing AED_EXCHANGE_RATES table.
-export const CJ_BALANCE_LOW_WARNING_AED = Number(process.env.CJ_BALANCE_LOW_WARNING_AED ?? 500);
-export const CJ_BALANCE_TARGET_MIN_AED = 1000;
-export const CJ_BALANCE_TARGET_MAX_AED = 1500;
+// Approved CJ Balance operating model (launch): controlled funding of
+// ~300-500 AED equivalent, warn when the balance LEFT after an order would
+// fall below 150 AED. The warning never blocks an affordable order; only an
+// insufficient balance blocks. Automatic top-up is deliberately NOT
+// implemented. Thresholds are AED because that is how the business holds
+// them; comparison against CJ's USD payable happens in cj-fulfillment.js
+// using the existing AED_EXCHANGE_RATES table.
+export const CJ_BALANCE_LOW_WARNING_AED = Number(process.env.CJ_BALANCE_LOW_WARNING_AED ?? 150);
+export const CJ_BALANCE_TARGET_MIN_AED = 300;
+export const CJ_BALANCE_TARGET_MAX_AED = 500;
 
-// Methods that are not "standard" fulfillment routes for AJLIB's product
-// and must never be auto-selected. Empty: every method CJ has actually
-// returned for this product so far (CJPacket family, PostNL, DHL Official)
-// is a legitimate standard route. Add here if CJ starts returning
-// pickup-only or freight-forwarder options.
+// Methods that are never appropriate for AJLIB's ordinary apparel and must
+// never be auto-selected, even when cheapest. Exact names go in the list;
+// whole CHANNEL TYPES are matched by pattern, because CJ returns many
+// variants of them (live US quote, 2026-09-18: "CJPacket Liquid US",
+// "CJPacket Pure Electricity", "YunExpress Sensitive", "CJPacket Sea",
+// "CJPacket USPS Remote", "CJPacket Ordinary Oversize Line", ...).
 export const EXCLUDED_LOGISTICS_METHODS = Object.freeze([]);
+export const EXCLUDED_LOGISTICS_PATTERNS = Object.freeze([
+  /liquid/i,          // liquids
+  /electric/i,        // battery / electronics channels
+  /sensitive/i,       // sensitive-goods channels (incl. "LX Sensitive Plant")
+  /\bsea\b/i,         // sea freight
+  /remote/i,          // remote-area surcharge channels
+  /oversize|over ?length/i, // oversized-parcel channels
+  /\bplant\b/i        // plant/biological channels
+]);
+export const isExcludedLogisticsMethod = (name, exactList = EXCLUDED_LOGISTICS_METHODS) =>
+  exactList.includes(name) || EXCLUDED_LOGISTICS_PATTERNS.some(pattern => pattern.test(String(name || '')));
 
-// Per-market overrides (force a method, or cap delivery days differently).
-// Empty — no market-specific rule has been approved.
-export const MARKET_OVERRIDES = Object.freeze({});
+// Per-market overrides: excludedMethods, maxDeliveryDays, and
+// preferredMethods (tried first, in order, when available and inside the
+// delivery promise; the cheapest route meeting the promise stays the
+// fallback, and cj-fulfillment.js falls back to it if the preferred route
+// would miss the margin band).
+//
+// US: YunExpress Ordinary, approved 2026-09-18 for the first controlled US
+// order — live quote 4-7 days vs LuWei Ordinary US 5-11 days for ~$1.70
+// more at 10 units, and still available at 15 units where LuWei is not.
+// The customer-facing US promise (shipping_zones, 8-16 days) is unchanged.
+export const MARKET_OVERRIDES = Object.freeze({
+  US: Object.freeze({ preferredMethods: Object.freeze(['YunExpress Ordinary']) })
+});
 
 const costOf = (method) => Number(method.totalPostageFee ?? method.logisticPrice);
 
@@ -128,7 +152,7 @@ export const selectLogisticsMethod = (availableMethods, { countryCode, maxDelive
 
   const override = MARKET_OVERRIDES[countryCode];
   const excluded = override?.excludedMethods ?? EXCLUDED_LOGISTICS_METHODS;
-  const standard = availableMethods.filter(m => !excluded.includes(m.logisticName));
+  const standard = availableMethods.filter(m => !isExcludedLogisticsMethod(m.logisticName, excluded));
   if (standard.length === 0) {
     return { method: null, cost: null, agingDays: null, reason: 'NO_STANDARD_METHOD_AVAILABLE' };
   }
@@ -164,9 +188,23 @@ export const selectLogisticsMethod = (availableMethods, { countryCode, maxDelive
     };
   }
 
-  const pick = meetsPromise[0];
-  return {
-    method: pick.logisticName, cost: costOf(pick), agingDays: maxAgingDays(pick),
+  const cheapest = meetsPromise[0];
+  const cheapestSelection = {
+    method: cheapest.logisticName, cost: costOf(cheapest), agingDays: maxAgingDays(cheapest),
     reason: meetsPromise.length === 1 ? 'ONLY_METHOD_MEETS_PROMISE' : 'CHEAPEST_MEETING_PROMISE'
   };
+
+  // A preferred route is used only if CJ offers it for THIS order and it is
+  // inside the promise; the cheapest compliant route is kept as fallback.
+  for (const name of override?.preferredMethods ?? []) {
+    const preferred = meetsPromise.find(m => m.logisticName === name);
+    if (preferred && preferred !== cheapest) {
+      return {
+        method: preferred.logisticName, cost: costOf(preferred), agingDays: maxAgingDays(preferred),
+        reason: 'PREFERRED_METHOD', fallback: cheapestSelection
+      };
+    }
+    if (preferred) return { ...cheapestSelection, reason: 'PREFERRED_METHOD' };
+  }
+  return cheapestSelection;
 };
