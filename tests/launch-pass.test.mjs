@@ -72,8 +72,8 @@ test('the delivery country is one dropdown that re-queries the backend quote', (
   assert.match(html, /<select id="buildCountry"[^>]*onchange="onBuildCountry\(this\.value\)"/);
   assert.match(html, /function onBuildCountry\(code\)\{buildCountry=code;refreshBuildQuote\(\)\}/);
   assert.match(html, /fetch\('\/api\/order-quote\?quantity='\+encodeURIComponent\(n\)\+'&country='\+encodeURIComponent\(code\)\)/);
-  // Main markets first, then every other country.
-  assert.match(html, /const primary=\['AE','SA','KW','QA','BH','OM','US','AU'\]/);
+  // Only the approved markets (see tests/shipping-markets.test.mjs).
+  assert.match(html, /const SHIPPING_COUNTRIES=\['AE','SA','KW','QA','BH','US','AU'\]/);
 });
 
 test('the summary is filled from the server quote, and stale responses are dropped', () => {

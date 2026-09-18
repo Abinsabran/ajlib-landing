@@ -7,6 +7,7 @@ import { buildValidatedOrder, OrderValidationError } from './_lib/order-validati
 import { persistPaidOrder } from './stripe-webhook.js';
 import { handleAdminFulfillment } from './_lib/admin-fulfillment.js';
 import { syncOpenOrders } from './_lib/fulfillment-tracking.js';
+import { SHIPPING_COUNTRIES } from './_lib/markets.js';
 
 // Grouped, provider-neutral handler for the foundation endpoints added
 // alongside the existing per-feature functions (checkout-session.js,
@@ -49,17 +50,21 @@ const shippingFallbackZones = [
   { code: 'OCEANIA', country_codes: 'AS AU CC CK CX FJ FM GU HM KI MH MP NC NF NR NU NZ PF PG PN PW SB TK TO TV UM VU WF WS'.split(' ') }
 ];
 
+// Exactly the approved markets (api/_lib/markets.js), in their fixed order —
+// the storefront and the app build their country pickers from this. A market
+// is only listed if an active shipping zone actually covers it.
 const listSupportedCountries = async () => {
+  let covered = new Set(shippingFallbackZones.flatMap(zone => zone.country_codes));
   if (process.env.SUPABASE_URL && process.env.SUPABASE_SECRET_KEY) {
     const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/shipping_zones?select=code,country_codes&active=eq.true`, {
       headers: { apikey: process.env.SUPABASE_SECRET_KEY, Authorization: `Bearer ${process.env.SUPABASE_SECRET_KEY}` }
     });
     if (response.ok) {
       const rows = await response.json();
-      if (Array.isArray(rows) && rows.length) return [...new Set(rows.flatMap(row => row.country_codes || []))];
+      if (Array.isArray(rows) && rows.length) covered = new Set(rows.flatMap(row => row.country_codes || []));
     }
   }
-  return [...new Set(shippingFallbackZones.flatMap(zone => zone.country_codes))];
+  return SHIPPING_COUNTRIES.filter(code => covered.has(code));
 };
 
 const quoteMessages = {

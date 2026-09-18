@@ -1,3 +1,5 @@
+import { isShippingCountry } from './_lib/markets.js';
+
 // IMPORTANT: these are only a FALLBACK. getZones() below prefers the
 // shipping_zones table whenever Supabase is reachable, so in Preview AND in
 // Production the customer-facing delivery window actually comes from the
@@ -32,6 +34,8 @@ const getZones = async () => {
 export const quoteShipping = async (countryCode) => {
   const code = String(countryCode || '').trim().toUpperCase();
   if (!/^[A-Z]{2}$/.test(code)) throw new Error('اختر دولة التوصيل');
+  // Approved markets only (api/_lib/markets.js) — enforced here, server-side.
+  if (!isShippingCountry(code)) throw new Error('الشحن إلى هذه الدولة غير متاح حاليًا');
   const zones = await getZones();
   const zone = zones.find(item => Array.isArray(item.country_codes) && item.country_codes.includes(code)) || zones.find(item => item.code === 'WORLD');
   if (!zone || zone.active === false) throw new Error('الشحن إلى هذه الدولة غير متاح حاليًا');

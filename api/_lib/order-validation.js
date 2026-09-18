@@ -56,7 +56,14 @@ export const buildValidatedOrder = async (order, { accessToken } = {}) => {
   if (COMMON_DOMAIN_TYPOS.has(emailDomain)) throw new OrderValidationError(400, 'يبدو أن نطاق البريد مكتوب بشكل غير صحيح. راجع gmail أو مزود بريدك قبل الدفع.');
 
   const countryCode = String(customer.country_code || '').trim().toUpperCase();
-  const shipping = await quoteShipping(countryCode); // may throw a plain Error — callers let it propagate, matching prior behavior
+  // An unsupported or missing country is the customer's input, not a server
+  // fault: reject it as a 400 (quoteShipping enforces the approved markets).
+  let shipping;
+  try {
+    shipping = await quoteShipping(countryCode);
+  } catch (error) {
+    throw new OrderValidationError(400, error.message || 'الشحن إلى هذه الدولة غير متاح حاليًا');
+  }
 
   let userId = '';
   if (accessToken && process.env.SUPABASE_URL && process.env.SUPABASE_PUBLISHABLE_KEY) {
