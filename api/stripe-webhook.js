@@ -1,4 +1,6 @@
 import crypto from 'node:crypto';
+import { quoteShipping } from './shipping-quote.js';
+import { runFulfillmentPreparation } from '../lib/fulfillment-runner.js';
 
 export const config = { api: { bodyParser: false } };
 
@@ -79,7 +81,7 @@ const saveOrder = async (session) => {
     const separator = item.lastIndexOf(':');
     return { variant: separator >= 0 ? item.slice(0, separator) : item, quantity: Number(separator >= 0 ? item.slice(separator + 1) : 1) };
   });
-  const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/orders?on_conflict=stripe_session_id&select=id,order_number,stripe_session_id`, {
+  const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/orders?on_conflict=stripe_session_id&select=*`, {
     method: 'POST',
     headers: {
       apikey: process.env.SUPABASE_SECRET_KEY,
@@ -151,10 +153,38 @@ const updateInventory = async (session) => {
 // Shared, provider-neutral order-persistence pipeline: save the paid order
 // (idempotent upsert on stripe_session_id — reused here as a generic
 // "this provider's unique payment reference" key, not Stripe-specific),
-// email the team, and decrement inventory. Both Stripe event handlers below
-// and the Tabby verify path (api/commerce.js, resource=tabby-verify) call
-// this instead of each re-implementing it.
-export const persistPaidOrder = (session) => Promise.all([saveOrder(session), sendOrderEmail(session), updateInventory(session)]);
+// email the team, decrement inventory, and then prepare fulfillment. Both
+// Stripe event handlers below and the Tabby verify path (api/commerce.js,
+// resource=tabby-verify) call this instead of each re-implementing it, so
+// this is the single integration point where payment meets fulfillment.
+//
+// Fulfillment preparation deliberately depends only on the order having been
+// SAVED — not on the email or inventory calls succeeding. A failed team
+// email must not leave a paid order unprepared. It also never throws, so it
+// can neither fail the payment response nor alter the paid order.
+export const persistPaidOrder = async (session) => {
+  const settled = await Promise.allSettled([saveOrder(session), sendOrderEmail(session), updateInventory(session)]);
+  const [saved] = settled;
+
+  if (saved.status === 'fulfilled' && saved.value?.id) {
+    let maxDeliveryDays;
+    try {
+      // The delivery promise is per-destination and lives in shipping_zones,
+      // so it is read rather than assumed. If it cannot be resolved,
+      // prepareFulfillment blocks on DELIVERY_PROMISE_NOT_CONFIGURED rather
+      // than picking an arbitrarily slow route.
+      const shipping = await quoteShipping(saved.value.shipping_country_code);
+      maxDeliveryDays = shipping.max_days;
+    } catch { maxDeliveryDays = undefined; }
+    await runFulfillmentPreparation(saved.value, { maxDeliveryDays });
+  }
+
+  // Preserve the previous contract: any failure among save/email/inventory
+  // still surfaces to the caller, so tabby-verify cannot report paid:true on
+  // an unconfirmed persistence.
+  for (const result of settled) if (result.status === 'rejected') throw result.reason;
+  return saved.value;
+};
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });

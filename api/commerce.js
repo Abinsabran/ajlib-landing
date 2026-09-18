@@ -277,7 +277,10 @@ const handleTabbyVerify = async (req, res) => {
     // persistPaidOrder's saveOrder now throws unless PostgREST hands back an
     // actual persisted row for this dedup key (see api/stripe-webhook.js) —
     // {paid:true} below is only reachable once that row is confirmed to exist.
-    const [savedOrderRow] = await persistPaidOrder(normalized);
+    // Returns the persisted row itself. Fulfillment preparation has already
+    // run inside persistPaidOrder by this point — the same shared call the
+    // Stripe webhook makes, so Tabby carries no fulfillment logic of its own.
+    const savedOrderRow = await persistPaidOrder(normalized);
     if (!savedOrderRow?.id) {
       throw new Error('Order persistence unconfirmed after upsert');
     }

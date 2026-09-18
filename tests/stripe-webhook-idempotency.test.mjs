@@ -121,7 +121,7 @@ test('native PaymentIntent webhook: two identical deliveries send byte-identical
       assert.equal(res1.statusCode, 200);
       assert.equal(res2.statusCode, 200);
 
-      const ordersCalls = calls.filter(c => c.url.includes('/rest/v1/orders'));
+      const ordersCalls = calls.filter(c => c.url.includes('/rest/v1/orders') && (c.options.method || 'GET') === 'POST');
       const emailCalls = calls.filter(c => c.url.includes('api.resend.com'));
       const inventoryCalls = calls.filter(c => c.url.includes('process_paid_inventory'));
 
@@ -152,7 +152,7 @@ test('native PaymentIntent idempotency key equals the Stripe PaymentIntent id (s
     const { calls, restore } = mockFetch();
     try {
       await handler(makeReq(nativePaymentIntentEvent()), makeRes());
-      const orderBody = JSON.parse(calls.find(c => c.url.includes('/rest/v1/orders')).options.body);
+      const orderBody = JSON.parse(calls.find(c => c.url.includes('/rest/v1/orders') && c.options.method === 'POST').options.body);
       assert.equal(orderBody.stripe_session_id, 'pi_native_test_1');
       assert.equal(orderBody.stripe_payment_intent_id, 'pi_native_test_1');
     } finally { restore(); }
@@ -176,7 +176,7 @@ test('hosted checkout.session.completed still processes exactly as before (one a
     try {
       const payload = checkoutSessionCompletedEvent();
       await handler(makeReq(payload), makeRes());
-      const ordersCalls = calls.filter(c => c.url.includes('/rest/v1/orders'));
+      const ordersCalls = calls.filter(c => c.url.includes('/rest/v1/orders') && (c.options.method || 'GET') === 'POST');
       assert.equal(ordersCalls.length, 1);
       const orderBody = JSON.parse(ordersCalls[0].options.body);
       assert.equal(orderBody.stripe_session_id, 'cs_web_test_1');

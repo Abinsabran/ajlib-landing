@@ -253,7 +253,9 @@ test('duplicate tabby-verify calls for the same payment send byte-identical idem
       assert.equal(res1.statusCode, 200);
       assert.equal(res2.statusCode, 200);
 
-      const orderCalls = calls.filter(c => c.url.includes('/rest/v1/orders') && !c.url.includes('rpc'));
+      // Only the UPSERT (POST). A PATCH to the same table is the fulfillment
+      // preparation write, asserted separately in fulfillment-integration.
+      const orderCalls = calls.filter(c => c.url.includes('/rest/v1/orders') && !c.url.includes('rpc') && c.options.method === 'POST');
       const emailCalls = calls.filter(c => c.url.includes('api.resend.com'));
       const inventoryCalls = calls.filter(c => c.url.includes('process_paid_inventory'));
 
