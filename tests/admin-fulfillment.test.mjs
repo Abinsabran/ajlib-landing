@@ -10,31 +10,73 @@ import commerce from '../api/commerce.js';
 import { selectLogisticsMethod, isExcludedLogisticsMethod, CJ_BALANCE_LOW_WARNING_AED } from '../api/_lib/logistics-policy.js';
 import { buildTrackingPatch, effectiveCjStatus } from '../api/_lib/fulfillment-tracking.js';
 import { serializeOrderForCustomer } from '../api/_lib/fulfillment-status.js';
+import { CJ_VARIANT_MAP } from '../api/_lib/cj-variant-map.js';
 
 // ---- fixtures --------------------------------------------------------------------
 
-const BLACK_L = '1581871544320667650';
-const NAVY_XL = '1581871544329056257';
-
-// Live US quote for 10 units, 2026-09-18 (lightest mix), plus channel types
-// that must never be picked for apparel even when cheaper.
+// Live CJ freight, 2026-09-18, US, the approved first-order mix (10 units).
 const US_10_METHODS = [
-  { logisticName: 'CJPacket Liquid US', totalPostageFee: 12.0, logisticAging: '5-11' },
-  { logisticName: 'CJPacket Sea', totalPostageFee: 13.0, logisticAging: '5-9' },
-  { logisticName: 'CJPacket USPS Remote', totalPostageFee: 14.0, logisticAging: '5-10' },
-  { logisticName: 'LuWei Ordinary US', totalPostageFee: 24.87, logisticAging: '5-11' },
-  { logisticName: 'YunExpress Ordinary', totalPostageFee: 26.42, logisticAging: '4-7' },
-  { logisticName: 'YunExpress Sensitive', totalPostageFee: 30.74, logisticAging: '4-7' },
-  { logisticName: 'CJPacket Ordinary', totalPostageFee: 30.8, logisticAging: '4-9' },
-  { logisticName: 'CJPacket Pure Electricity', totalPostageFee: 20.0, logisticAging: '7-14' },
-  { logisticName: 'DHL Official', totalPostageFee: 54.56, logisticAging: '3-7' }
+  { logisticName: "YunExpress Ordinary", totalPostageFee: 27.48, logisticAging: "4-7" },
+  { logisticName: "LuWei Ordinary US", totalPostageFee: 25.83, logisticAging: "5-11" },
+  { logisticName: "YunExpress Sensitive", totalPostageFee: 31.98, logisticAging: "4-7" },
+  { logisticName: "CJPacket Ordinary", totalPostageFee: 32.06, logisticAging: "4-9" },
+  { logisticName: "CJPacket Sensitive", totalPostageFee: 34.69, logisticAging: "4-9" },
+  { logisticName: "CJPacket Eub", totalPostageFee: 36.53, logisticAging: "12-50" },
+  { logisticName: "CJPacket Fast Ordinary", totalPostageFee: 38.41, logisticAging: "4-6" },
+  { logisticName: "CJPacket Eub Special Line", totalPostageFee: 39.86, logisticAging: "10-23" },
+  { logisticName: "CJPacket Liquid US", totalPostageFee: 41.38, logisticAging: "5-11" },
+  { logisticName: "CJPacket FJTY Eub Special Line", totalPostageFee: 43.29, logisticAging: "15-25" },
+  { logisticName: "CJPacket Sensitive Pro+", totalPostageFee: 43.56, logisticAging: "6-11" },
+  { logisticName: "CJPacket Super Pure Electricity", totalPostageFee: 44.22, logisticAging: "5-11" },
+  { logisticName: "CJPacket Pure Electricity", totalPostageFee: 44.22, logisticAging: "7-14" },
+  { logisticName: "USPS", totalPostageFee: 43.66, logisticAging: "4-9" },
+  { logisticName: "USPS Ordinary", totalPostageFee: 40.74, logisticAging: "5-11" },
+  { logisticName: "CJPacket Ordinary Over Length", totalPostageFee: 44.84, logisticAging: "7-11" },
+  { logisticName: "CJPacket Fast Line", totalPostageFee: 46.28, logisticAging: "4-9" },
+  { logisticName: "CJPacket Fast US", totalPostageFee: 46.58, logisticAging: "7-12" },
+  { logisticName: "Qfulfillment A line", totalPostageFee: 47.65, logisticAging: "10-25" },
+  { logisticName: "CJPacket Liquid Line", totalPostageFee: 48.52, logisticAging: "20-60" },
+  { logisticName: "CJPacket Ordinary Oversize Line", totalPostageFee: 48.55, logisticAging: "7-15" },
+  { logisticName: "CJPacket LX Sensitive Plant", totalPostageFee: 51.74, logisticAging: "8-20" },
+  { logisticName: "CJPacket Sensitive Over Length", totalPostageFee: 51.42, logisticAging: "7-12" },
+  { logisticName: "CJPacket Sensitive Oversize Line", totalPostageFee: 52.17, logisticAging: "8-16" },
+  { logisticName: "DHL Official", totalPostageFee: 54.56, logisticAging: "3-7" },
+  { logisticName: "CJPacket USPS Remote", totalPostageFee: 60.29, logisticAging: "5-10" },
+  { logisticName: "CJPacket Postal", totalPostageFee: 61.38, logisticAging: "5-9" },
+  { logisticName: "CJPacket Sea", totalPostageFee: 82.98, logisticAging: "25-30" }
 ];
+// Live CJ freight, 2026-09-18, UAE, 5 x Black L.
+const AE_5_METHODS = [
+  { logisticName: "CJPacket Eub", totalPostageFee: 10.52, logisticAging: "12-50" },
+  { logisticName: "CJPacket Eub Special Line", totalPostageFee: 12.46, logisticAging: "8-15" },
+  { logisticName: "CJPacket Liquid Line", totalPostageFee: 13.25, logisticAging: "7-10" },
+  { logisticName: "CJPacket Ordinary", totalPostageFee: 16.19, logisticAging: "7-11" },
+  { logisticName: "CJPacket Sensitive", totalPostageFee: 16.85, logisticAging: "7-11" },
+  { logisticName: "CJPacket Postal", totalPostageFee: 17.96, logisticAging: "12-50" },
+  { logisticName: "PostNL", totalPostageFee: 32.61, logisticAging: "15-45" },
+  { logisticName: "DHL Official", totalPostageFee: 118.44, logisticAging: "3-5" }
+];
+// Live CJ freight, 2026-09-18, UAE, the approved 10-unit mix.
+const AE_10_METHODS = [
+  { logisticName: "CJPacket Eub", totalPostageFee: 19.03, logisticAging: "12-50" },
+  { logisticName: "CJPacket Eub Special Line", totalPostageFee: 22.98, logisticAging: "8-15" },
+  { logisticName: "CJPacket Liquid Line", totalPostageFee: 23.43, logisticAging: "7-10" },
+  { logisticName: "CJPacket Ordinary", totalPostageFee: 27.54, logisticAging: "7-11" },
+  { logisticName: "CJPacket Sensitive", totalPostageFee: 28.87, logisticAging: "7-11" },
+  { logisticName: "CJPacket Postal", totalPostageFee: 31.64, logisticAging: "12-50" },
+  { logisticName: "PostNL", totalPostageFee: 60.99, logisticAging: "15-45" },
+  { logisticName: "DHL Official", totalPostageFee: 151.23, logisticAging: "3-5" }
+];
+
+// The approved first US order: 2 Black L, 2 Black XL, 1 each Navy/Gray/White L and XL.
+const FIRST_ORDER_ITEMS = [['أسود-L', 2], ['أسود-XL', 2], ['كحلي-L', 1], ['كحلي-XL', 1], ['رمادي-L', 1], ['رمادي-XL', 1], ['أبيض-L', 1], ['أبيض-XL', 1]].map(([variant, quantity]) => ({ variant, quantity }));
+const vidOf = (key) => CJ_VARIANT_MAP.find(v => v.ajlibKey === key).cjVariantId;
 
 const baseOrder = (over = {}) => ({
   id: '11111111-1111-4111-8111-111111111111',
   order_number: 'AJ10000001',
   status: 'paid',
-  items: [{ variant: 'أسود-L', quantity: 5 }, { variant: 'كحلي-XL', quantity: 5 }],
+  items: FIRST_ORDER_ITEMS,
   product_amount: 26900, shipping_amount: 15000, amount_total: 41900, currency: 'aed',
   shipping_country_code: 'US', shipping_country_name: 'United States', shipping_region: 'California',
   shipping_city: 'Lake Forest', shipping_address: 'Test street 1', shipping_postal_code: '92630',
@@ -80,7 +122,7 @@ const world = ({ orders = [baseOrder()], balanceUSD = 85, methods = US_10_METHOD
     if (u.hostname.includes('cjdropshipping')) {
       calls.cj.push(u.pathname);
       if (u.pathname.endsWith('/authentication/getAccessToken')) return ok({ code: 200, result: true, data: { accessToken: 'tok', accessTokenExpiryDate: new Date(Date.now() + 3600_000).toISOString() } });
-      if (u.pathname.endsWith('/product/conn/connection')) return ok({ code: 200, result: true, data: { list: [{ cjVariantId: BLACK_L, cjPrice: '2.21' }, { cjVariantId: NAVY_XL, cjPrice: '2.21' }] } });
+      if (u.pathname.endsWith('/product/conn/connection')) return ok({ code: 200, result: true, data: { list: CJ_VARIANT_MAP.map(v => ({ cjVariantId: v.cjVariantId, cjPrice: '2.21' })) } });
       if (u.pathname.endsWith('/logistic/freightCalculate')) return ok({ code: 200, result: true, data: methods });
       if (u.pathname.endsWith('/shopping/pay/getBalance')) return ok({ code: 200, result: true, data: { amount: balanceUSD, freezeAmount: 0, noWithdrawalAmount: 0 } });
       if (u.pathname.endsWith('/shopping/order/createOrderV2')) {
@@ -141,7 +183,7 @@ test('an order stuck in REVIEW_REQUIRED (empty wallet) becomes READY_FOR_CJ once
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.outcome, 'READY_FOR_CJ');
   assert.equal(res.body.route.method, 'YunExpress Ordinary');
-  assert.equal(res.body.requiredUSD, 48.72); // 10 x 2.21 + 26.42 + 10 x 0.02
+  assert.equal(res.body.requiredUSD, 49.78); // 10 x 2.21 + 27.48 (live YunExpress) + 10 x 0.02
   assert.equal(res.body.margin.band, 'GREEN');
   assert.equal(res.body.payload.payType, 2);
   assert.equal(res.body.payload.orderNumber, 'AJLIB-AJ10000001');
@@ -154,11 +196,11 @@ test('an order stuck in REVIEW_REQUIRED (empty wallet) becomes READY_FOR_CJ once
 
 test('the low-balance warning does not block an affordable order; an insufficient balance does', async () => {
   assert.equal(CJ_BALANCE_LOW_WARNING_AED, 150);
-  // $85 - $48.72 leaves ~133 AED: below the 150 AED warning, still affordable.
+  // $85 - $49.78 leaves ~129 AED: below the 150 AED warning, still affordable.
   const warned = await run(world({ balanceUSD: 85 }), { body: { action: 'reprepare', order_id: ORDER_ID } });
   assert.equal(warned.body.outcome, 'READY_FOR_CJ');
   assert.equal(warned.body.balance.lowBalanceWarning, true);
-  const w = world({ balanceUSD: 48.71 });
+  const w = world({ balanceUSD: 49.77 });
   const blocked = await run(w, { body: { action: 'reprepare', order_id: ORDER_ID } });
   assert.equal(blocked.body.outcome, 'REVIEW_REQUIRED');
   assert.equal(blocked.body.reason, 'INSUFFICIENT_CJ_BALANCE');
@@ -207,7 +249,8 @@ test('submit sends exactly one createOrderV2 (payType=2, preferred route), recor
   assert.equal(payload.payType, 2);
   assert.equal(payload.logisticName, 'YunExpress Ordinary');
   assert.equal(payload.orderNumber, 'AJLIB-AJ10000001');
-  assert.deepEqual(payload.products, [{ vid: BLACK_L, quantity: 5 }, { vid: NAVY_XL, quantity: 5 }]);
+  assert.deepEqual(payload.products, FIRST_ORDER_ITEMS.map(i => ({ vid: vidOf(i.variant), quantity: i.quantity })));
+  assert.equal(payload.products.reduce((n, p) => n + p.quantity, 0), 10);
   const row = w.db.get(ORDER_ID);
   assert.equal(row.fulfillment_external_order_id, 'CJ-ORDER-1');
   assert.notEqual(row.fulfillment_status, 'SUBMITTING');
@@ -273,20 +316,35 @@ test('the preference applies to the US only; other markets stay cheapest-appropr
   assert.equal(selectLogisticsMethod(US_10_METHODS, { countryCode: 'SA', maxDeliveryDays: 16 }).method, 'LuWei Ordinary US');
 });
 
-test('Liquid, Electricity, Sensitive, Sea and Remote/oversize channels are never selected, even when cheapest', () => {
-  for (const name of ['CJPacket Liquid US', 'CJPacket Liquid Line', 'CJPacket Pure Electricity', 'CJPacket Super Pure Electricity', 'YunExpress Sensitive', 'CJPacket Sensitive Pro+', 'CJPacket LX Sensitive Plant', 'CJPacket Sea', 'CJPacket USPS Remote', 'CJPacket Ordinary Oversize Line', 'CJPacket Ordinary Over Length']) {
-    assert.ok(isExcludedLogisticsMethod(name), name);
+test('routes are never rejected by name: UAE keeps CJPacket Liquid Line when CJ returns it (5 and 10 units)', () => {
+  const ae5 = selectLogisticsMethod(AE_5_METHODS, { countryCode: 'AE', maxDeliveryDays: 14 });
+  assert.equal(ae5.method, 'CJPacket Liquid Line');
+  assert.equal(ae5.cost, 13.25);
+  assert.equal(ae5.reason, 'CHEAPEST_MEETING_PROMISE');
+  const ae10 = selectLogisticsMethod(AE_10_METHODS, { countryCode: 'AE', maxDeliveryDays: 14 });
+  assert.equal(ae10.method, 'CJPacket Liquid Line');
+  assert.equal(ae10.cost, 23.43);
+  assert.equal(ae10.fallback, undefined, 'no preference applies outside the US');
+  for (const name of ['CJPacket Liquid Line', 'CJPacket Sensitive', 'CJPacket Pure Electricity', 'CJPacket Sea', 'CJPacket USPS Remote']) {
+    assert.equal(isExcludedLogisticsMethod(name), false, name);
   }
-  for (const name of ['YunExpress Ordinary', 'LuWei Ordinary US', 'CJPacket Ordinary', 'CJPacket Fast Ordinary', 'USPS', 'DHL Official', 'CJPacket Postal']) {
-    assert.ok(!isExcludedLogisticsMethod(name), name);
+});
+
+test('the approved first US order resolves to exactly 10 units through the confirmed 16-variant map', () => {
+  assert.equal(FIRST_ORDER_ITEMS.reduce((n, i) => n + i.quantity, 0), 10);
+  for (const item of FIRST_ORDER_ITEMS) {
+    const mapped = CJ_VARIANT_MAP.find(v => v.ajlibKey === item.variant);
+    assert.ok(mapped && /^\d{19}$/.test(mapped.cjVariantId), item.variant);
   }
-  const onlyBad = US_10_METHODS.filter(m => isExcludedLogisticsMethod(m.logisticName));
-  assert.equal(selectLogisticsMethod(onlyBad, { countryCode: 'US', maxDeliveryDays: 16 }).method, null);
+  const us = selectLogisticsMethod(US_10_METHODS, { countryCode: 'US', maxDeliveryDays: 16 });
+  assert.equal(us.method, 'YunExpress Ordinary');
+  assert.equal(us.cost, 27.48);
+  assert.equal(us.agingDays, 7);
 });
 
 test('if the preferred route would miss the 25% band, the cheaper appropriate route is used instead', async () => {
-  // At 245 AED collected: YunExpress lands just under 25%, LuWei just over.
-  const w = world({ orders: [baseOrder({ product_amount: 24500, shipping_amount: 0 })], balanceUSD: 85 });
+  // At 250 AED collected: YunExpress lands just under 25%, LuWei just over.
+  const w = world({ orders: [baseOrder({ product_amount: 25000, shipping_amount: 0 })], balanceUSD: 85 });
   const res = await run(w, { body: { action: 'reprepare', order_id: ORDER_ID } });
   assert.equal(res.body.outcome, 'READY_FOR_CJ');
   assert.equal(res.body.route.method, 'LuWei Ordinary US');
