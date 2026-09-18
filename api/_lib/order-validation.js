@@ -1,4 +1,4 @@
-import { quoteShipping } from '../api/shipping-quote.js';
+import { quoteShipping } from '../shipping-quote.js';
 import { computeProductPricing, MIN_QUANTITY, MAX_QUANTITY } from './pricing.js';
 
 // The single authoritative place that turns a raw client-submitted order

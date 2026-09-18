@@ -17,7 +17,7 @@
 // AJLIB-side identifiers below (id/platformProductId/platformVariantId) are
 // ones WE choose — they are not CJ identifiers and are safe to define here.
 // CJ-side identifiers (cjProductId/cjVariantId) come only from
-// lib/cj-variant-map.js's confirmed, non-guessed data.
+// api/_lib/cj-variant-map.js's confirmed, non-guessed data.
 
 import { CJ_VARIANT_MAP, CJ_PRODUCT_FAMILY_PID, isFullyMapped } from './cj-variant-map.js';
 import { colorCodeFromNameAr } from './catalog.js';

@@ -1,4 +1,4 @@
-import { buildValidatedOrder, OrderValidationError } from '../lib/order-validation.js';
+import { buildValidatedOrder, OrderValidationError } from './_lib/order-validation.js';
 
 const stripeRequest = async (path, options = {}) => {
   const response = await fetch(`https://api.stripe.com/v1/${path}`, {

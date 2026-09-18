@@ -14,14 +14,14 @@
 //
 //  2. It stops BEFORE createOrderV2. Success here means "this order is ready
 //     to be sent to CJ", not "sent". Nothing in this file can create or pay
-//     a CJ order. Sending is lib/fulfillment-submitter.js's job alone, and
+//     a CJ order. Sending is api/_lib/fulfillment-submitter.js's job alone, and
 //     it is gated by CJ_LIVE_ORDER_CREATION_ENABLED.
 
 import { prepareFulfillment, FulfillmentBlockedError } from './cj-fulfillment.js';
 
 // AJLIB's own pre-CJ pipeline state, written to orders.fulfillment_status.
 // Once a real CJ order exists this column carries CJ's raw status instead
-// (see lib/fulfillment-status.js PROVIDER_STATUS_MAP) — these values only
+// (see api/_lib/fulfillment-status.js PROVIDER_STATUS_MAP) — these values only
 // describe the window between "customer paid" and "sent to CJ".
 export const FULFILLMENT_STATE = Object.freeze({
   READY_FOR_CJ: 'READY_FOR_CJ',

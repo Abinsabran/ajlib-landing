@@ -10,7 +10,7 @@ import crypto from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
 import stripeWebhookHandler from '../api/stripe-webhook.js';
 import commerceHandler, { tabbyTimestampToEpochSeconds } from '../api/commerce.js';
-import { runFulfillmentPreparation, FULFILLMENT_STATE } from '../lib/fulfillment-runner.js';
+import { runFulfillmentPreparation, FULFILLMENT_STATE } from '../api/_lib/fulfillment-runner.js';
 
 const FULFILLMENT_COLUMNS = [
   'fulfillment_provider', 'fulfillment_external_order_id', 'fulfillment_external_order_number',

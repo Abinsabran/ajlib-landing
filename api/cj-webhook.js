@@ -12,7 +12,7 @@
 // guessed. Requires the raw, unparsed body (same reason api/stripe-webhook.js
 // disables Vercel's body parser).
 import crypto from 'node:crypto';
-import { nextInternalStatusFromCjStatus } from '../lib/fulfillment-status.js';
+import { nextInternalStatusFromCjStatus } from './_lib/fulfillment-status.js';
 
 export const config = { api: { bodyParser: false } };
 

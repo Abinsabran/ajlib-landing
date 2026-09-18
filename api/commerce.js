@@ -1,9 +1,9 @@
 import { quoteShipping } from './shipping-quote.js';
-import { computeProductPricing, MIN_QUANTITY, MAX_QUANTITY } from '../lib/pricing.js';
-import { PRODUCTS } from '../lib/catalog.js';
-import { COUNTRY_CURRENCY, currencyForCountry, convertAedFilsForDisplay } from '../lib/currency.js';
-import { isTabbyPotentiallyAvailable, createCheckoutSession, verifyPayment } from '../lib/tabby-client.js';
-import { buildValidatedOrder, OrderValidationError } from '../lib/order-validation.js';
+import { computeProductPricing, MIN_QUANTITY, MAX_QUANTITY } from './_lib/pricing.js';
+import { PRODUCTS } from './_lib/catalog.js';
+import { COUNTRY_CURRENCY, currencyForCountry, convertAedFilsForDisplay } from './_lib/currency.js';
+import { isTabbyPotentiallyAvailable, createCheckoutSession, verifyPayment } from './_lib/tabby-client.js';
+import { buildValidatedOrder, OrderValidationError } from './_lib/order-validation.js';
 import { persistPaidOrder } from './stripe-webhook.js';
 
 // Grouped, provider-neutral handler for the foundation endpoints added
@@ -17,7 +17,7 @@ import { persistPaidOrder } from './stripe-webhook.js';
 //
 // Nothing about pricing, shipping, quantity limits, or Stripe checkout is
 // touched by this file — see api/checkout-session.js, api/shipping-quote.js
-// and lib/pricing.js, all unchanged.
+// and api/_lib/pricing.js, all unchanged.
 
 const RESOURCE_BY_PATH = {
   '/api/order-quote': 'order-quote',
@@ -310,7 +310,7 @@ const handleTabbyVerify = async (req, res) => {
 // shapes during Phase 2 — including catching that session.id and
 // session.payment.id are different values) have all been removed now that
 // they've served their purpose. rawCjGet/tabbyDiagnosticPost/tabbyRawGet
-// remain in lib/ for any future re-sync need.
+// remain in api/_lib/ for any future re-sync need.
 
 // Phase 3 discovery diagnostics (cj-auth-diagnostic, cj-diagnostic) have
 // been removed now that they confirmed: no AJLIB store product exists yet
@@ -333,7 +333,7 @@ const handleTabbyVerify = async (req, res) => {
 // report for the full 8x5 matrix.
 
 // Shop-list diagnostic (cj-shops-diagnostic) removed now that it resolved
-// AJLIB_DEFAULT_SHOP_ID (see lib/cj-store-connection.js) via GET
+// AJLIB_DEFAULT_SHOP_ID (see api/_lib/cj-store-connection.js) via GET
 // /shop/getShops: two "api"-type shops exist; the one named exactly "AJLIB"
 // (id 2609160939212912600) is used, distinguished from the other entry
 // which carries a stray leading Arabic diacritic in its name.
@@ -345,8 +345,8 @@ const handleTabbyVerify = async (req, res) => {
 // read-only GET /product/conn/connection: 16/16 connections exist, each with
 // shopId 2609160939212912600, platformProductId
 // ajlib-ice-silk-boxer-briefs, cjProductId 1581871544228392960, and the
-// correct cjVariantId per lib/cj-variant-map.js. No CJ order was created; no
-// packaging/sticker endpoint was ever called. lib/cj-client.js's
+// correct cjVariantId per api/_lib/cj-variant-map.js. No CJ order was created; no
+// packaging/sticker endpoint was ever called. api/_lib/cj-client.js's
 // saveStoreProduct/saveStoreVariantBatch/createProductConnection/
 // queryProductConnections remain available for any future re-sync need.
 

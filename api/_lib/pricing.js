@@ -2,7 +2,7 @@
 // formula previously inlined in api/checkout-session.js so api/order-quote.js
 // can reuse it without duplicating (or drifting from) the real business logic.
 // APPROVED: AJLIB's launch minimum order quantity is 5 units. Enforced here
-// once and consumed everywhere — lib/order-validation.js (used by BOTH the
+// once and consumed everywhere — api/_lib/order-validation.js (used by BOTH the
 // Stripe and Tabby checkout paths) and api/commerce.js's order-quote all
 // read these constants rather than repeating a literal, so the storefront,
 // the quote API and checkout cannot disagree about the minimum.

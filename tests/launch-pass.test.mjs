@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
-import { computeProductPricing, MIN_QUANTITY, MAX_QUANTITY } from '../lib/pricing.js';
+import { computeProductPricing, MIN_QUANTITY, MAX_QUANTITY } from '../api/_lib/pricing.js';
 
 const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 const migrationsDir = new URL('../supabase/migrations/', import.meta.url);

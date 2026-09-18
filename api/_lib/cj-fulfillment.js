@@ -7,7 +7,7 @@
 // both call the same functions here.
 //
 // Nothing in this file sends a CJ order. createFulfillmentOrder in
-// lib/cj-client.js remains disabled; buildCjOrderPayload here only
+// api/_lib/cj-client.js remains disabled; buildCjOrderPayload here only
 // constructs the request body for review.
 
 import { cjVariantFor, AJLIB_VARIANT_KEYS } from './cj-variant-map.js';

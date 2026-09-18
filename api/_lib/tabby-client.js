@@ -39,7 +39,7 @@ const tabbyRequest = async (path, options = {}) => {
   return body;
 };
 
-// amountFils/currency mirror what lib/order-validation.js already computes
+// amountFils/currency mirror what api/_lib/order-validation.js already computes
 // (AED fils) — this converts to Tabby's plain decimal-string amount format,
 // it does not recompute price or shipping. successUrl/cancelUrl/failureUrl
 // are required by Tabby to know where to redirect the buyer back to.

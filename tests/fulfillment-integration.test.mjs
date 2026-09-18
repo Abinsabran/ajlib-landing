@@ -11,7 +11,7 @@ import crypto from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import stripeWebhookHandler from '../api/stripe-webhook.js';
 import commerceHandler from '../api/commerce.js';
-import { runFulfillmentPreparation, alreadyPrepared, FULFILLMENT_STATE } from '../lib/fulfillment-runner.js';
+import { runFulfillmentPreparation, alreadyPrepared, FULFILLMENT_STATE } from '../api/_lib/fulfillment-runner.js';
 
 const WEBHOOK_SECRET = 'whsec_test_secret';
 const SUPABASE_URL = 'https://supabase.test';
@@ -290,12 +290,12 @@ test('no CJ order is created anywhere in the payment path', async () => {
 });
 
 test('live CJ order creation is still disabled at the client', async () => {
-  const { createFulfillmentOrder } = await import('../lib/cj-client.js');
+  const { createFulfillmentOrder } = await import('../api/_lib/cj-client.js');
   await assert.rejects(() => createFulfillmentOrder({}), /disabled/i);
 });
 
 test('the runner cannot reach order creation — it only ever prepares', async () => {
-  const source = await readFile(new URL('../lib/fulfillment-runner.js', import.meta.url), 'utf8');
+  const source = await readFile(new URL('../api/_lib/fulfillment-runner.js', import.meta.url), 'utf8');
   const code = source.replace(/\/\/[^\n]*/g, '');
   assert.ok(!/createFulfillmentOrder|createOrderV2/.test(code));
 });
@@ -303,7 +303,7 @@ test('the runner cannot reach order creation — it only ever prepares', async (
 // ---- NO PROVIDER INTERNALS LEAK ----------------------------------------------
 
 test('the fulfillment fields written are internal-only and never surface to customers', async () => {
-  const { serializeOrderForCustomer } = await import('../lib/fulfillment-status.js');
+  const { serializeOrderForCustomer } = await import('../api/_lib/fulfillment-status.js');
   const order = {
     ...savedOrderRow(),
     status: 'shipped', currency: 'aed', tracking_number: 'TRACK1',

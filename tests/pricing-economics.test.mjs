@@ -8,11 +8,11 @@ import assert from 'node:assert/strict';
 import {
   evaluateFulfillmentMargin, paymentFeeUSD, computeTrueVariableCost,
   minimumRevenueAedForMargin, aedToUsd
-} from '../lib/cj-fulfillment.js';
+} from '../api/_lib/cj-fulfillment.js';
 import {
   TABBY_FEE_PERCENT, TABBY_FEE_FIXED_AED, CJ_CUSTOMIZATION_COST_USD_PER_UNIT,
   STRIPE_FEE_PERCENT, STRIPE_FEE_FIXED_AED, selectLogisticsMethod, DELIVERY_PROMISE_MAX_DAYS
-} from '../lib/logistics-policy.js';
+} from '../api/_lib/logistics-policy.js';
 
 const CJ_UNIT_COST = 2.21;
 

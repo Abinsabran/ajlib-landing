@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { quoteShipping } from './shipping-quote.js';
-import { runFulfillmentPreparation } from '../lib/fulfillment-runner.js';
+import { runFulfillmentPreparation } from './_lib/fulfillment-runner.js';
 
 export const config = { api: { bodyParser: false } };
 

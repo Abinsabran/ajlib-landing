@@ -10,8 +10,8 @@ import { readFile, readdir } from 'node:fs/promises';
 import {
   createFulfillmentOrder, isLiveOrderCreationEnabled, LiveOrderCreationDisabledError,
   CjOrderRequestTimeoutError, CJ_LIVE_ORDER_FLAG
-} from '../lib/cj-client.js';
-import { submitReadyOrder, SUBMIT_OUTCOME } from '../lib/fulfillment-submitter.js';
+} from '../api/_lib/cj-client.js';
+import { submitReadyOrder, SUBMIT_OUTCOME } from '../api/_lib/fulfillment-submitter.js';
 
 const withEnv = async (vars, fn) => {
   const previous = {};
@@ -101,7 +101,7 @@ test('with the flag off, submitting a READY order sends no createOrderV2, no pay
 });
 
 test('the flag is enforced at the call itself, so no other code path can bypass it', async () => {
-  const source = (await readFile(new URL('../lib/cj-client.js', import.meta.url), 'utf8')).replace(/\/\/[^\n]*/g, '');
+  const source = (await readFile(new URL('../api/_lib/cj-client.js', import.meta.url), 'utf8')).replace(/\/\/[^\n]*/g, '');
   const fn = source.slice(source.indexOf('export const createFulfillmentOrder'));
   const guardAt = fn.indexOf('isLiveOrderCreationEnabled()');
   const fetchAt = fn.indexOf('fetch(');
@@ -109,7 +109,7 @@ test('the flag is enforced at the call itself, so no other code path can bypass 
 });
 
 test('createFulfillmentOrder has exactly one caller: the submitter', async () => {
-  const roots = ['../api/', '../lib/'];
+  const roots = ['../api/', '../api/_lib/'];
   const callers = [];
   for (const root of roots) {
     const dir = new URL(root, import.meta.url);
@@ -119,11 +119,11 @@ test('createFulfillmentOrder has exactly one caller: the submitter', async () =>
       if (/createFulfillmentOrder\(/.test(code) && !/export const createFulfillmentOrder/.test(code)) callers.push(`${root}${file}`);
     }
   }
-  assert.deepEqual(callers, ['../lib/fulfillment-submitter.js']);
+  assert.deepEqual(callers, ['../api/_lib/fulfillment-submitter.js']);
 });
 
 test('nothing triggers submission automatically — not the payment webhook, not an endpoint', async () => {
-  for (const file of ['../api/stripe-webhook.js', '../api/commerce.js', '../lib/fulfillment-runner.js']) {
+  for (const file of ['../api/stripe-webhook.js', '../api/commerce.js', '../api/_lib/fulfillment-runner.js']) {
     const code = (await readFile(new URL(file, import.meta.url), 'utf8')).replace(/\/\/[^\n]*/g, '');
     assert.ok(!/submitReadyOrder|fulfillment-submitter/.test(code), `${file} must not trigger live submission`);
   }

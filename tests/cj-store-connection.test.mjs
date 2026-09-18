@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { AJLIB_VARIANT_KEYS, CJ_VARIANT_MAP, CJ_PRODUCT_FAMILY_PID, CJ_PRODUCT_FAMILY_SKU } from '../lib/cj-variant-map.js';
-import { buildSaveProductPayload, buildSaveVariantBatchPayload, buildCreateConnectionPayload, platformVariantId, AJLIB_PLATFORM_PRODUCT_ID, LOGISTICS_METHODS_COMMON_TO_ALL_SUPPORTED_DESTINATIONS, RECOMMENDED_DEFAULT_LOGISTICS, AJLIB_DEFAULT_SHOP_ID } from '../lib/cj-store-connection.js';
-import { serializeOrderForCustomer } from '../lib/fulfillment-status.js';
+import { AJLIB_VARIANT_KEYS, CJ_VARIANT_MAP, CJ_PRODUCT_FAMILY_PID, CJ_PRODUCT_FAMILY_SKU } from '../api/_lib/cj-variant-map.js';
+import { buildSaveProductPayload, buildSaveVariantBatchPayload, buildCreateConnectionPayload, platformVariantId, AJLIB_PLATFORM_PRODUCT_ID, LOGISTICS_METHODS_COMMON_TO_ALL_SUPPORTED_DESTINATIONS, RECOMMENDED_DEFAULT_LOGISTICS, AJLIB_DEFAULT_SHOP_ID } from '../api/_lib/cj-store-connection.js';
+import { serializeOrderForCustomer } from '../api/_lib/fulfillment-status.js';
 
 // Phase 3: validates the exact payload shapes CJ's official docs specify for
 // the API-store connection flow, WITHOUT ever calling CJ. No network call

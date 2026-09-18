@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { AJLIB_VARIANT_KEYS, CJ_VARIANT_MAP, isFullyMapped, missingVariants, cjVariantFor } from '../lib/cj-variant-map.js';
-import { serializeOrderForCustomer } from '../lib/fulfillment-status.js';
+import { AJLIB_VARIANT_KEYS, CJ_VARIANT_MAP, isFullyMapped, missingVariants, cjVariantFor } from '../api/_lib/cj-variant-map.js';
+import { serializeOrderForCustomer } from '../api/_lib/fulfillment-status.js';
 
 // Phase 2 requires: all 16 AJLIB variants mapped, no duplicates, no guessed
 // mappings, and no CJ metadata ever reaching a customer-facing response.

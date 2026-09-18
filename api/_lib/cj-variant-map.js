@@ -6,8 +6,8 @@
 //
 // AJLIB_VARIANT_KEY uses the same color/size vocabulary as the rest of the
 // codebase: the Arabic color name already used by inventory/orders (see
-// lib/catalog.js colorNameAr, api/inventory.js) plus the size string.
-// CJ identifiers are internal only — see lib/fulfillment-status.js and the
+// api/_lib/catalog.js colorNameAr, api/inventory.js) plus the size string.
+// CJ identifiers are internal only — see api/_lib/fulfillment-status.js and the
 // customer-safe serializer for where the boundary is enforced; nothing here
 // is ever exported to a customer-facing API.
 

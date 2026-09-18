@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { computeProductPricing, computeUnitPrice, computeSavingsPercent, BASELINE_UNIT_PRICE, MIN_QUANTITY, MAX_QUANTITY } from '../lib/pricing.js';
-import { allVariants, PRODUCTS, COLORS, SIZES } from '../lib/catalog.js';
-import { COUNTRY_CURRENCY, currencyForCountry, convertAedFilsForDisplay } from '../lib/currency.js';
-import { customerStatusFor, serializeOrderForCustomer, CUSTOMER_STATUS } from '../lib/fulfillment-status.js';
+import { computeProductPricing, computeUnitPrice, computeSavingsPercent, BASELINE_UNIT_PRICE, MIN_QUANTITY, MAX_QUANTITY } from '../api/_lib/pricing.js';
+import { allVariants, PRODUCTS, COLORS, SIZES } from '../api/_lib/catalog.js';
+import { COUNTRY_CURRENCY, currencyForCountry, convertAedFilsForDisplay } from '../api/_lib/currency.js';
+import { customerStatusFor, serializeOrderForCustomer, CUSTOMER_STATUS } from '../api/_lib/fulfillment-status.js';
 import { readFile } from 'node:fs/promises';
 
 // PRICING — approved UAE launch ladder: 135/269/399/519 AED at 5/10/15/20,
@@ -132,7 +132,7 @@ test('fulfillment: no internal/provider fields leak into the customer serializat
 });
 
 // The storefront duplicates the pricing ladder (index.html defines both a
-// `packs` array and flexibleUnitPrice). If it drifts from lib/pricing.js the
+// `packs` array and flexibleUnitPrice). If it drifts from api/_lib/pricing.js the
 // customer sees one price and is charged another, so pin them together.
 test('storefront pricing matches the server-authoritative ladder exactly', async () => {
   const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');

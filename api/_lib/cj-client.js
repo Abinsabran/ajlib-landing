@@ -310,7 +310,7 @@ export const findOrderByOrderNumber = async (orderNumber, { maxPages = 5, pageSi
 // CREATED, IN_CART, UNPAID, PENDING, PROCESSING, UNSHIPPED (parent of
 // PENDING/PROCESSING), SHIPPED, DELIVERED, CANCELLED. Tracking fields:
 // trackNumber, trackingProvider, trackingUrl (null when no tracking exists
-// yet). See lib/fulfillment-status.js PROVIDER_STATUS_MAP for the mapping
+// yet). See api/_lib/fulfillment-status.js PROVIDER_STATUS_MAP for the mapping
 // of these into AJLIB's 5 customer-facing statuses.
 export const getFulfillmentOrderStatus = async (cjOrderId) => {
   const body = await authorizedRequest(`/shopping/order/getOrderDetail?orderId=${encodeURIComponent(cjOrderId)}`, { method: 'GET' });
@@ -329,9 +329,9 @@ export const getFulfillmentOrderStatus = async (cjOrderId) => {
 // Therefore the caller MUST NOT wrap it in a blind retry. A timeout is not a
 // failure — the money may already be gone. Every timeout, and every
 // repeated-payment business error, must be resolved through
-// lib/cj-fulfillment.js reconcileAfterTimeout(), which is read-only and only
+// api/_lib/cj-fulfillment.js reconcileAfterTimeout(), which is read-only and only
 // reports safeToRetry=true when CJ has no order under our deterministic
-// orderNumber at all. lib/fulfillment-submitter.js is the one caller and
+// orderNumber at all. api/_lib/fulfillment-submitter.js is the one caller and
 // does exactly that.
 //
 // THE ONLY MONEY-SPENDING CALL IN THIS CODEBASE. With payType=2 it creates,
@@ -354,7 +354,7 @@ export class LiveOrderCreationDisabledError extends Error {
 
 // A timed-out payType=2 request is NOT a failed request — the balance may
 // already have been deducted. Callers must treat this as "unknown" and
-// reconcile read-only (lib/cj-fulfillment.js reconcileAfterTimeout), never
+// reconcile read-only (api/_lib/cj-fulfillment.js reconcileAfterTimeout), never
 // retry. The timeout exists so a hung request resolves into that path
 // instead of outliving the serverless function.
 export class CjOrderRequestTimeoutError extends Error {

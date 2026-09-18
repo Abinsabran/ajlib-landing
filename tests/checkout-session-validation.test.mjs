@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import handler from '../api/checkout-session.js';
 
 // Locks the exact status codes/messages api/checkout-session.js returned
-// BEFORE its validation logic was extracted into lib/order-validation.js
+// BEFORE its validation logic was extracted into api/_lib/order-validation.js
 // (for reuse by the new Tabby checkout path). No behavior here should have
 // changed — these are the same checks, same wording, just relocated.
 

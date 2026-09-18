@@ -7,15 +7,15 @@ import {
   parseCjBalanceUSD, evaluateBalanceSufficiency, aedToUsd,
   CJ_PAY_TYPE_BALANCE, CJ_PAY_TYPE_CREATE_ONLY,
   paymentFeeUSD, computeTrueVariableCost, minimumRevenueAedForMargin
-} from '../lib/cj-fulfillment.js';
+} from '../api/_lib/cj-fulfillment.js';
 import { readFile } from 'node:fs/promises';
-import { isCjErrorBody, throttleCj, CJ_MIN_REQUEST_GAP_MS } from '../lib/cj-client.js';
+import { isCjErrorBody, throttleCj, CJ_MIN_REQUEST_GAP_MS } from '../api/_lib/cj-client.js';
 import {
   selectLogisticsMethod, maxAgingDays, MIN_ACCEPTABLE_MARGIN_PERCENT, CJ_BALANCE_LOW_WARNING_AED,
   classifyMargin, CJ_MARGIN_AUTO_PERCENT, CJ_MARGIN_REVIEW_FLOOR_PERCENT, CJ_MARGIN_TARGET_PERCENT
-} from '../lib/logistics-policy.js';
-import { PROVIDER_STATUS_MAP, nextInternalStatusFromCjStatus, serializeOrderForCustomer } from '../lib/fulfillment-status.js';
-import { AJLIB_VARIANT_KEYS } from '../lib/cj-variant-map.js';
+} from '../api/_lib/logistics-policy.js';
+import { PROVIDER_STATUS_MAP, nextInternalStatusFromCjStatus, serializeOrderForCustomer } from '../api/_lib/fulfillment-status.js';
+import { AJLIB_VARIANT_KEYS } from '../api/_lib/cj-variant-map.js';
 
 const withEnv = async (vars, fn) => {
   const previous = {};
@@ -307,7 +307,7 @@ test('prepareFulfillment blocks with INSUFFICIENT_CJ_BALANCE before building any
 });
 
 test('the CJ wallet is never spent directly — no payBalance endpoint exists anywhere in the client', async () => {
-  const clientSource = await readFile(new URL('../lib/cj-client.js', import.meta.url), 'utf8');
+  const clientSource = await readFile(new URL('../api/_lib/cj-client.js', import.meta.url), 'utf8');
   // Comments may *name* the write endpoints to explain why they're absent;
   // what must not exist is an actual request built against one.
   const code = clientSource.replace(/\/\/[^\n]*/g, '');
@@ -729,7 +729,7 @@ test('the unknown-payment-fee guard still exists, so an unconfigured rate could 
   // remain for any future provider whose rate is not yet known: an unknown
   // fee means the true cost is unknown, which must block rather than be
   // scored with a guessed number.
-  const source = await readFile(new URL('../lib/cj-fulfillment.js', import.meta.url), 'utf8');
+  const source = await readFile(new URL('../api/_lib/cj-fulfillment.js', import.meta.url), 'utf8');
   assert.ok(source.includes('PAYMENT_FEE_NOT_CONFIGURED'), 'the unknown-fee guard must not be deleted');
   assert.ok(/if \(feeUSD == null\)/.test(source), 'the null-fee branch must remain');
 });

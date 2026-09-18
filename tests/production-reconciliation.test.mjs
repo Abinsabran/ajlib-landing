@@ -191,3 +191,11 @@ test('.vercelignore keeps SQL, migrations and tests off the public site, but no 
     assert.doesNotMatch(rule, /^(\/?api|\/?lib|\/?assets|\/?images|\*\.html|\*\.js|vercel\.json|index\.html|legal\.html)\/?$/, `${rule} would drop a runtime file`);
   }
 });
+
+test('server-only modules live in api/_lib (never served, never a function); function budget holds', async () => {
+  const { readdir } = await import('node:fs/promises');
+  await assert.rejects(access(new URL('lib/', root)), 'a top-level lib/ would be served publicly as static files');
+  const functions = (await readdir(new URL('api/', root))).filter(f => f.endsWith('.js'));
+  assert.ok(functions.length <= 12, `${functions.length} functions exceeds the Hobby limit of 12`);
+  assert.ok((await readdir(new URL('api/_lib/', root))).includes('pricing.js'));
+});

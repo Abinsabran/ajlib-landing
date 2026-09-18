@@ -13,8 +13,8 @@ import {
   buildCjOrderPayload, cjOrderNumberFor,
   isCjOrderPaid, reconcileAfterTimeout, resolveRepeatedPaymentError,
   CJ_PAY_TYPE_BALANCE
-} from '../lib/cj-fulfillment.js';
-import { getAccountBalance } from '../lib/cj-client.js';
+} from '../api/_lib/cj-fulfillment.js';
+import { getAccountBalance } from '../api/_lib/cj-client.js';
 
 const withEnv = async (vars, fn) => {
   const previous = {};
@@ -28,7 +28,7 @@ const authResponse = { ok: true, json: async () => ({ data: { accessToken: 'tok'
 // ---- CORRECTED BALANCE ENDPOINT ---------------------------------------------
 
 test('the balance client calls /shopping/pay/getBalance, not the wrong /shopping/balance/ path', async () => {
-  const source = await readFile(new URL('../lib/cj-client.js', import.meta.url), 'utf8');
+  const source = await readFile(new URL('../api/_lib/cj-client.js', import.meta.url), 'utf8');
   const code = source.replace(/\/\/[^\n]*/g, ''); // comments may still name the old path
   assert.ok(code.includes('/shopping/pay/getBalance'), 'must use the CJ-confirmed path');
   assert.ok(!code.includes('/shopping/balance/getBalance'), 'the incorrect path must be gone');
@@ -101,7 +101,7 @@ test('payType=2 is used, and its irreversibility is documented at the call site'
   });
   assert.equal(payload.payType, CJ_PAY_TYPE_BALANCE);
   assert.equal(payload.payType, 2);
-  const source = await readFile(new URL('../lib/cj-client.js', import.meta.url), 'utf8');
+  const source = await readFile(new URL('../api/_lib/cj-client.js', import.meta.url), 'utf8');
   assert.ok(/cannot be rolled back/i.test(source), 'irreversibility must be documented where the call lives');
 });
 
@@ -210,7 +210,7 @@ test('reconciliation keys off our deterministic orderNumber and is itself idempo
 });
 
 test('the CJ wallet still cannot be spent directly — only via an approved createOrderV2', async () => {
-  const source = await readFile(new URL('../lib/cj-client.js', import.meta.url), 'utf8');
+  const source = await readFile(new URL('../api/_lib/cj-client.js', import.meta.url), 'utf8');
   const code = source.replace(/\/\/[^\n]*/g, '');
   assert.ok(!/payBalance/.test(code), 'payBalance/payBalanceV2 must never be callable');
 });
