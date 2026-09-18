@@ -124,21 +124,18 @@ test('Stripe identifiers are hidden from customers; fulfillment_* stays hidden',
   assert.ok(!granted.some(c => c.startsWith('fulfillment_')));
 });
 
-test('admin_note is staged: still granted now (the live admin console needs it), revoked in the deploy-time step', async () => {
-  const now = grantedIn(await readMigration('_hide_operational_columns_and_admin_order_read.sql'));
-  assert.ok(now.includes('admin_note'), 'must stay granted until the new website is live');
-  const pendingFile = migrationFiles.find(f => f.startsWith('PENDING_AT_PRODUCTION_DEPLOY_'));
-  assert.ok(pendingFile, 'the deploy-time step must exist');
-  assert.ok(pendingFile.endsWith('.sql.txt'), 'must NOT be pushable by `supabase db push`');
-  const pending = grantedIn((await readFile(new URL(pendingFile, migrationsDir), 'utf8')).replace(/--.*$/gm, ''));
-  assert.ok(!pending.includes('admin_note'));
-  assert.ok(!pending.includes('stripe_session_id'));
+test('admin_note is hidden from customers, applied with the Production website deploy', async () => {
+  // Staged earlier: granted while the OLD live admin console read it directly;
+  // revoked once the new console (admin_list_orders()) was live in Production.
+  assert.ok(!migrationFiles.some(f => f.startsWith('PENDING_')), 'no deferred step may be left behind');
+  const now = grantedIn(await readMigration('_hide_admin_note_from_customers.sql'));
+  for (const hidden of ['admin_note', 'stripe_session_id', 'stripe_payment_intent_id']) assert.ok(!now.includes(hidden), `${hidden} leaks`);
+  assert.ok(!now.some(c => c.startsWith('fulfillment_')));
 });
 
-test('every live and shipped reader keeps working under the current grant', async () => {
-  const granted = grantedIn(await readMigration('_hide_operational_columns_and_admin_order_read.sql'));
+test('every current reader keeps working under the current grant', async () => {
+  const granted = grantedIn(await readMigration('_hide_admin_note_from_customers.sql'));
   const readers = {
-    'LIVE Production admin console': 'id,order_number,customer_name,customer_email,customer_phone,shipping_address,items,amount_total,currency,status,shipping_company,tracking_number,admin_note,created_at,updated_at',
     'storefront customer order list': 'order_number,items,amount_total,currency,status,shipping_company,tracking_number,created_at,updated_at',
     'shipped Expo customer list (+user_id filter)': 'order_number,amount_total,currency,status,items,tracking_number,shipping_company,created_at,updated_at,user_id',
     'shipped Expo admin console': 'id,order_number,customer_name,customer_email,customer_phone,shipping_address,items,amount_total,currency,status,shipping_company,tracking_number,created_at,updated_at'
@@ -150,10 +147,10 @@ test('every live and shipped reader keeps working under the current grant', asyn
 });
 
 test('the storefront reads NO hidden column directly', async () => {
-  const pending = grantedIn((await readFile(new URL(migrationFiles.find(f => f.startsWith('PENDING_AT_PRODUCTION_DEPLOY_')), migrationsDir), 'utf8')).replace(/--.*$/gm, ''));
+  const granted = grantedIn(await readMigration('_hide_admin_note_from_customers.sql'));
   for (const m of html.matchAll(/rest\/v1\/orders\?select=([a-z_,]+)/g)) {
-    const missing = m[1].split(',').filter(c => !pending.includes(c));
-    assert.deepEqual(missing, [], `storefront selects a column customers will lose: ${missing}`);
+    const missing = m[1].split(',').filter(c => !granted.includes(c));
+    assert.deepEqual(missing, [], `storefront selects a column customers cannot read: ${missing}`);
   }
 });
 
