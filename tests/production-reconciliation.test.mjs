@@ -181,3 +181,13 @@ test('a launch-branch PaymentIntent (full metadata) never touches pending_mobile
     } finally { restore(); }
   });
 });
+
+// ---- deploy contents ---------------------------------------------------------------
+
+test('.vercelignore keeps SQL, migrations and tests off the public site, but no runtime file', async () => {
+  const rules = (await read('.vercelignore')).split(/\r?\n/).map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+  for (const required of ['*.sql', 'supabase/', 'tests/', 'server.js', '.env*']) assert.ok(rules.includes(required), `missing ${required}`);
+  for (const rule of rules) {
+    assert.doesNotMatch(rule, /^(\/?api|\/?lib|\/?assets|\/?images|\*\.html|\*\.js|vercel\.json|index\.html|legal\.html)\/?$/, `${rule} would drop a runtime file`);
+  }
+});

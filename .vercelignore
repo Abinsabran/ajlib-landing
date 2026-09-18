@@ -1,0 +1,20 @@
+# Never upload internal files to Vercel: anything uploaded that is not a
+# function is served publicly as a static file.
+# Runtime needs only: api/, lib/, *.html, assets/, images/, vercel.json.
+
+# Database schema, migrations and reference SQL
+*.sql
+*.sql.txt
+supabase/
+
+# Tests and local tooling
+tests/
+server.js
+node_modules/
+.env*
+
+# Repo metadata
+.git/
+.gitignore
+CNAME
+*.md
