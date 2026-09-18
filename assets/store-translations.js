@@ -436,6 +436,27 @@
     'جميع الدول': 'All countries',
     'حمّل التطبيق من': 'Download on the',
     'الشحن والتوصيل': 'Shipping & delivery',
+    // Checkout payment methods (card via Stripe, Tabby).
+    'طريقة الدفع': 'Payment method',
+    'الدفع بالبطاقة عبر Stripe': 'Pay by card with Stripe',
+    'الدفع على أقساط عبر Tabby': 'Pay in installments with Tabby',
+    'ستنتقل إلى صفحة Tabby الآمنة لإكمال الدفع.': 'You will continue to Tabby’s secure page to complete payment.',
+    'المتابعة إلى Tabby': 'Continue to Tabby',
+    'جارٍ تجهيز صفحة Tabby…': 'Preparing Tabby checkout…',
+    'تعذر بدء الدفع عبر Tabby': 'Unable to start Tabby checkout',
+    'Tabby غير متاح لهذا الطلب. يمكنك الدفع بالبطاقة.': 'Tabby is not available for this order. You can pay by card.',
+    'لم تتم الموافقة على الدفع عبر Tabby. يمكنك الدفع بالبطاقة.': 'Tabby did not approve this payment. You can pay by card.',
+    'تم إلغاء الدفع عبر Tabby، وطلبك ما زال محفوظًا في السلة': 'Tabby payment was cancelled. Your order is still in your cart.',
+    'نتحقق من عملية الدفع مع Tabby.': 'We are confirming your payment with Tabby.',
+    'تم تأكيد الدفع عبر Tabby': 'Payment confirmed with Tabby',
+    'ستصلك تفاصيل الدفع من Tabby.': 'Tabby will send you the payment details.',
+    'تم الرجوع من Tabby': 'Back from Tabby',
+    'إذا بدأت الطلب من تطبيق AJLIB فارجع إلى التطبيق لإكمال التأكيد. رقم الطلب:': 'If you started this order in the AJLIB app, return to the app to finish confirming it. Order number:',
+    'حدّث الصفحة لإعادة المحاولة، أو تواصل معنا إذا لم تتحدث الحالة خلال دقائق.': 'Refresh the page to try again, or contact us if the status does not update within a few minutes.',
+    'لم يكتمل الدفع عبر Tabby بعد': 'The Tabby payment is not complete yet',
+    'مبلغ الدفع لا يطابق قيمة الطلب': 'The payment amount does not match the order total',
+    'تعذر التحقق من الدفع عبر Tabby': 'Unable to verify the Tabby payment',
+    'الدفع عبر Tabby غير مفعّل بعد': 'Tabby payments are not available yet',
     'نوصل إلى جميع دول العالم. التوصيل داخل الإمارات خلال 7–14 يوم عمل، وتظهر تكلفة ومدة الشحن لكل دولة عند اختيارها.': 'We deliver worldwide. Delivery within the UAE takes 7–14 business days; shipping costs and delivery times for other countries appear when you select them.'
   };
 

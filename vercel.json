@@ -12,7 +12,9 @@
     { "source": "/api/order-quote", "destination": "/api/commerce?resource=order-quote" },
     { "source": "/api/catalog", "destination": "/api/commerce?resource=catalog" },
     { "source": "/api/currency", "destination": "/api/commerce?resource=currency" },
-    { "source": "/api/tabby-availability", "destination": "/api/commerce?resource=tabby-availability" }
+    { "source": "/api/tabby-availability", "destination": "/api/commerce?resource=tabby-availability" },
+    { "source": "/api/tabby-checkout", "destination": "/api/commerce?resource=tabby-checkout" },
+    { "source": "/api/tabby-verify", "destination": "/api/commerce?resource=tabby-verify" }
   ],
   "headers": [
     {
