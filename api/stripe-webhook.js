@@ -118,7 +118,13 @@ const saveOrder = async (session) => {
       status: 'paid',
       stripe_session_id: session.id,
       stripe_payment_intent_id: session.payment_intent || null,
-      paid_at: new Date((session.created || Math.floor(Date.now() / 1000)) * 1000).toISOString()
+      // paid_at comes from the payment provider's own timestamp (Stripe's
+      // session.created; Tabby's payment created_at). It is only written
+      // when that timestamp is real. Omitting it — rather than falling back
+      // to "now" — matters because this is an upsert with merge-duplicates:
+      // an omitted column is left as-is on conflict, so a duplicate delivery
+      // or re-verification can never move an already-recorded paid_at.
+      ...(Number.isFinite(session.created) ? { paid_at: new Date(session.created * 1000).toISOString() } : {})
     })
   });
   const rawBody = await response.text();
