@@ -1,0 +1,24 @@
+.language-toggle{flex-shrink:0;min-height:42px;padding:9px 13px;border:1px solid var(--line,#ded8ca);border-radius:999px;background:#fff;color:var(--olive,#26352d);font:inherit;font-size:14px;font-weight:700;cursor:pointer;white-space:nowrap}
+.language-toggle:hover{background:#f1eee5}
+.language-toggle:focus-visible{outline:3px solid var(--gold,#b58a3c);outline-offset:3px}
+html[lang="en"] body{font-family:"Segoe UI",Arial,sans-serif}
+html[dir="ltr"] .pack,html[dir="ltr"] .admin-nav button{text-align:left}
+html[dir="ltr"] .pack-unit{text-align:right}
+html[dir="ltr"] .cart-btn span{margin-right:0;margin-left:5px}
+html[dir="ltr"] .piece-grid{padding-left:0;padding-right:4px}
+html[dir="ltr"] .panel{left:auto;right:0}
+html[dir="ltr"] .close{float:right}
+html[dir="ltr"] .track-step{padding-right:0;padding-left:38px;border-right:0;border-left:2px solid var(--line)}
+html[dir="ltr"] .track-step:last-child{border-left-color:transparent}
+html[dir="ltr"] .track-step:before{right:auto;left:-8px}
+html[dir="ltr"] .tracking-info{border-right:0;border-left:4px solid var(--ok)}
+html[dir="ltr"] .worldwide-note{border-right:0;border-left:4px solid var(--gold)}
+html[dir="ltr"] .field-password input{padding-left:13px;padding-right:72px}
+html[dir="ltr"] .password-toggle{left:auto;right:8px}
+html[dir="ltr"] .history-card ul{padding-right:0;padding-left:20px}
+html[dir="ltr"] .admin-order-items{padding-right:12px;padding-left:28px}
+html[dir="ltr"] .hero h1{font-size:clamp(38px,5vw,64px);line-height:1.1;letter-spacing:-1.5px}
+.app-store-copy{white-space:nowrap}
+@media(max-width:520px){html[lang="en"] .pack{flex-wrap:wrap;gap:10px}html[lang="en"] .pack>span:first-child{min-width:90px}html[lang="en"] .pack-pricing{flex:1;min-width:155px}html[lang="en"] .pack>b{font-size:17px}}
+@media(max-width:620px){header>nav.wrap{height:auto;min-height:72px;gap:8px;flex-wrap:wrap;padding-block:10px}.language-toggle{padding:8px 10px;font-size:13px}.nav-actions{flex-shrink:0}.brand{gap:6px}}
+@media(max-width:360px){header>nav.wrap{justify-content:center}.brand{margin-inline-end:auto}.nav-actions{gap:4px}.language-toggle{padding-inline:8px}}

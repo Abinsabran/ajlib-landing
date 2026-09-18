@@ -13,14 +13,18 @@ export default async function handler(req,res){
       const usersRes=await fetch(`${process.env.SUPABASE_URL}/auth/v1/admin/users?per_page=1000`,{headers:serviceHeaders()});
       if(!usersRes.ok){const detail=await usersRes.text();return res.status(502).json({error:'تعذر تحميل حسابات العملاء',detail:detail.slice(0,300)})}
       const users=(await usersRes.json()).users||[];
-      const profilesRes=await db('/rest/v1/profiles?select=id,full_name,phone,emirate,city,address,delivery_notes,role');
+      const profilesRes=await db('/rest/v1/profiles?select=id,full_name,phone,role');
       if(!profilesRes.ok){const detail=await profilesRes.text();return res.status(502).json({error:'تعذر تحميل بيانات العملاء',detail:detail.slice(0,300)})}
       const profileRows=await profilesRes.json();
       const profiles=new Map((Array.isArray(profileRows)?profileRows:[]).map(p=>[p.id,p]));
+      const addressesRes=await db('/rest/v1/addresses?select=id,user_id,label,country_code,country_name,region,city,postal_code,address_line1,address_line2,delivery_notes,is_default&order=is_default.desc,created_at.asc');
+      const addressRows=addressesRes.ok?await addressesRes.json():[];
+      const defaultAddresses=new Map();
+      for(const address of Array.isArray(addressRows)?addressRows:[])if(!defaultAddresses.has(address.user_id))defaultAddresses.set(address.user_id,address);
       const ordersRes=await db('/rest/v1/orders?select=user_id,customer_email,status,amount_total');
       if(!ordersRes.ok){const detail=await ordersRes.text();return res.status(502).json({error:'تعذر تحميل ملخص طلبات العملاء',detail:detail.slice(0,300)})}
       const orderRows=await ordersRes.json(),orders=Array.isArray(orderRows)?orderRows:[];
-      return res.status(200).json(users.map(u=>{const p=profiles.get(u.id)||{},own=orders.filter(o=>o.user_id===u.id||String(o.customer_email||'').toLowerCase()===String(u.email||'').toLowerCase());return{id:u.id,email:u.email,created_at:u.created_at,last_sign_in_at:u.last_sign_in_at,...p,orders_count:own.length,active_orders:own.filter(o=>!['delivered','cancelled','refunded'].includes(o.status)).length,total_spent:own.filter(o=>!['cancelled','refunded'].includes(o.status)).reduce((s,o)=>s+Number(o.amount_total||0),0)}}));
+      return res.status(200).json(users.map(u=>{const p=profiles.get(u.id)||{},a=defaultAddresses.get(u.id)||{},own=orders.filter(o=>o.user_id===u.id||String(o.customer_email||'').toLowerCase()===String(u.email||'').toLowerCase());return{id:u.id,email:u.email,created_at:u.created_at,last_sign_in_at:u.last_sign_in_at,...p,address_id:a.id||'',country_code:a.country_code||'',country_name:a.country_name||'',region:a.region||'',city:a.city||'',postal_code:a.postal_code||'',address:a.address_line1||'',address_line2:a.address_line2||'',delivery_notes:a.delivery_notes||'',orders_count:own.length,active_orders:own.filter(o=>!['delivered','cancelled','refunded'].includes(o.status)).length,total_spent:own.filter(o=>!['cancelled','refunded'].includes(o.status)).reduce((s,o)=>s+Number(o.amount_total||0),0)}}));
     }
     const body=req.body||{},id=String(body.id||''); if(!id)return res.status(400).json({error:'معرّف العميل مطلوب'});
     if(req.method==='PATCH'){
@@ -34,9 +38,13 @@ export default async function handler(req,res){
         if(!authUpdate.ok){const detail=await authUpdate.json().catch(()=>({}));return res.status(409).json({error:detail.msg||detail.message||'تعذر تغيير البريد؛ قد يكون مستخدمًا في حساب آخر'})}
         await db(`/rest/v1/orders?or=(user_id.eq.${encodeURIComponent(id)},customer_email.eq.${encodeURIComponent(oldEmail)})`,{method:'PATCH',body:JSON.stringify({customer_email:email})});
       }
-      const profile={full_name:String(body.full_name||'').trim(),phone:String(body.phone||'').trim(),emirate:String(body.emirate||'').trim(),city:String(body.city||'').trim(),address:String(body.address||'').trim(),delivery_notes:String(body.delivery_notes||'').trim()};
+      const profile={full_name:String(body.full_name||'').trim(),phone:String(body.phone||'').trim()};
       const p=await db(`/rest/v1/profiles?id=eq.${encodeURIComponent(id)}`,{method:'PATCH',headers:{Prefer:'return=representation'},body:JSON.stringify(profile)});
       if(!p.ok)return res.status(502).json({error:'تعذر حفظ بيانات العميل'});
+      if(body.address_id){
+        const address={city:String(body.city||'').trim(),region:String(body.region||'').trim(),postal_code:String(body.postal_code||'').trim()||null,address_line1:String(body.address||'').trim(),address_line2:String(body.address_line2||'').trim()||null,delivery_notes:String(body.delivery_notes||'').trim()||null};
+        await db(`/rest/v1/addresses?id=eq.${encodeURIComponent(body.address_id)}&user_id=eq.${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify(address)});
+      }
       return res.status(200).json({email,...((await p.json())[0]||profile)});
     }
     if(req.method==='DELETE'){

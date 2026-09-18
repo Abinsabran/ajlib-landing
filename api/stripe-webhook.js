@@ -192,6 +192,38 @@ export const persistPaidOrder = async (session) => {
   return saved.value;
 };
 
+// Transitional compatibility with the checkout that was live before this
+// branch: it created the app's PaymentIntent with ONLY metadata[order_id] and
+// kept the order details in the private pending_mobile_orders table. A
+// PaymentIntent created by that code can still succeed after this deploy
+// (rows expire after 24 hours), so its details are read back from that table
+// instead of being persisted as an empty order. No shipping_city exists
+// there, so fulfillment will stop at MISSING_SHIPPING_CITY for manual review.
+const loadPendingMobileOrder = async (intent) => {
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SECRET_KEY) throw new Error('Mobile order storage is not configured');
+  const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/pending_mobile_orders?stripe_payment_intent_id=eq.${encodeURIComponent(intent.id)}&select=*`, {
+    headers: { apikey: process.env.SUPABASE_SECRET_KEY, Authorization: `Bearer ${process.env.SUPABASE_SECRET_KEY}` }
+  });
+  if (!response.ok) throw new Error('Pending mobile order lookup failed');
+  const pending = (await response.json())[0];
+  if (!pending) throw new Error(`No order details for PaymentIntent ${intent.id}`);
+  return {
+    order_id: pending.order_number, user_id: pending.user_id || '', customer_name: pending.customer_name || '', phone: pending.customer_phone || '',
+    address: pending.shipping_address || '', address_id: pending.shipping_address_id || '', country_code: pending.shipping_country_code || '',
+    country_name: pending.shipping_country_name || '', region: pending.shipping_region || '', postal_code: pending.shipping_postal_code || '',
+    notes: pending.notes || '', items: pending.item_summary || '', product_amount: String(pending.product_amount || 0),
+    shipping_amount: String(pending.shipping_amount || 0), shipping_zone: pending.shipping_zone || '', preorder: pending.preorder || '',
+    customer_email: pending.customer_email || ''
+  };
+};
+
+const deletePendingMobileOrder = async (intentId) => {
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SECRET_KEY) return;
+  await fetch(`${process.env.SUPABASE_URL}/rest/v1/pending_mobile_orders?stripe_payment_intent_id=eq.${encodeURIComponent(intentId)}`, {
+    method: 'DELETE', headers: { apikey: process.env.SUPABASE_SECRET_KEY, Authorization: `Bearer ${process.env.SUPABASE_SECRET_KEY}` }
+  });
+};
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!process.env.STRIPE_WEBHOOK_SECRET || !process.env.RESEND_API_KEY) {
@@ -217,17 +249,22 @@ export default async function handler(req, res) {
     // is what stops every web order from being double-processed.
     if (event.type === 'payment_intent.succeeded' && event.data?.object?.metadata?.order_id) {
       const intent = event.data.object;
+      // Intents from this branch carry the order in metadata; intents from the
+      // previous checkout carry only order_id (see loadPendingMobileOrder).
+      const legacy = !intent.metadata.items;
+      const { customer_email: pendingEmail, ...metadata } = legacy ? await loadPendingMobileOrder(intent) : { ...intent.metadata };
       const normalized = {
         id: intent.id,
-        metadata: intent.metadata || {},
+        metadata,
         customer_details: null,
-        customer_email: intent.receipt_email || '',
-        amount_total: intent.amount,
+        customer_email: intent.receipt_email || pendingEmail || '',
+        amount_total: legacy ? (intent.amount_received || intent.amount) : intent.amount,
         currency: intent.currency,
         payment_intent: intent.id,
         created: intent.created
       };
       await persistPaidOrder(normalized);
+      if (legacy) await deletePendingMobileOrder(intent.id);
     }
     return res.status(200).json({ received: true });
   } catch (error) {

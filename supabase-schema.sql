@@ -67,7 +67,10 @@ for each row execute procedure public.handle_new_user();
 
 -- Production-grade upgrades: lifecycle, performance and reliable timestamps.
 alter table public.orders
-  add column if not exists updated_at timestamptz not null default now();
+  add column if not exists updated_at timestamptz not null default now(),
+  add column if not exists shipping_company text,
+  add column if not exists tracking_number text,
+  add column if not exists admin_note text;
 
 alter table public.profiles
   add column if not exists emirate text,
@@ -116,3 +119,62 @@ for each row execute procedure public.set_updated_at();
 
 comment on table public.profiles is 'Private AJLIB customer profile data.';
 comment on table public.orders is 'Paid AJLIB orders populated by the verified Stripe webhook.';
+
+-- Secure owner/admin access. The role is controlled by the database, never by the browser.
+alter table public.profiles
+  add column if not exists role text not null default 'customer';
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'profiles_role_check'
+  ) then
+    alter table public.profiles add constraint profiles_role_check
+      check (role in ('customer','admin','owner'));
+  end if;
+end $$;
+
+create or replace function public.is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1 from public.profiles
+    where id = auth.uid() and role in ('admin','owner')
+  );
+$$;
+
+revoke all on function public.is_admin() from public;
+grant execute on function public.is_admin() to authenticated;
+
+-- Customers may edit profile details, but can never promote their own role.
+revoke insert, update on table public.profiles from authenticated;
+grant insert (id, full_name, phone, emirate, city, address, delivery_notes)
+  on table public.profiles to authenticated;
+grant update (full_name, phone, emirate, city, address, delivery_notes)
+  on table public.profiles to authenticated;
+
+grant update (status, shipping_company, tracking_number, admin_note) on table public.orders to authenticated;
+
+drop policy if exists "Admins read all orders" on public.orders;
+create policy "Admins read all orders" on public.orders
+for select to authenticated using (public.is_admin());
+
+drop policy if exists "Admins update order status" on public.orders;
+create policy "Admins update order status" on public.orders
+for update to authenticated using (public.is_admin())
+with check (public.is_admin());
+
+-- Assign the verified founder account as the immutable first owner.
+update public.profiles p
+set role = 'owner'
+from auth.users u
+where p.id = u.id
+  and lower(u.email) = lower('a.binsabran@hotmail.com');
+
+comment on column public.profiles.role is 'Server-controlled AJLIB authorization role.';
+
+-- Inventory readiness is applied from app-readiness-migration.sql.
