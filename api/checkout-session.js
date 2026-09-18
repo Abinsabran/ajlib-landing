@@ -101,6 +101,16 @@ export default async function handler(req, res) {
       'payment_intent_data[description]': `AJLIB order ${String(order.id)}`,
       'invoice_creation[enabled]': 'true',
       'phone_number_collection[enabled]': 'true',
+      // AED only. With Adaptive Pricing on (the Dashboard default), Stripe's
+      // hosted page offered a converted local currency (e.g. USD 118.61 for
+      // an AED 419 order) and, after the customer switched back to AED, Apple
+      // Pay was shown "$419.00": the AED amount under the USD currency code.
+      // That is a Stripe-side wallet/presentment mismatch we cannot fix on
+      // their page, so the currency choice is removed for this session. The
+      // customer sees and is charged exactly the server-priced AED total in
+      // card, Apple Pay, Google Pay and Link alike; a non-AED card is
+      // converted by the card issuer. Prices are unchanged.
+      'adaptive_pricing[enabled]': 'false',
       'line_items[0][price_data][currency]': 'aed',
       'line_items[0][price_data][unit_amount]': String(productAmount),
       'line_items[0][price_data][product_data][name]': `AJLIB — ${quantity} قطع`,

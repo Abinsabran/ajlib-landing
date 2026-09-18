@@ -34,11 +34,27 @@ const formatItems = (value = '') => String(value).split(',').filter(Boolean).map
   return `<li><b>${escapeHtml(count)} قطعة</b> — ${escapeHtml(variant.replace('-', ' / '))}</li>`;
 }).join('');
 
+// The amount AJLIB actually priced and charged, in AED. Checkout Sessions are
+// created in AED with Adaptive Pricing off, so this is normally just
+// amount_total/currency. It stays correct even if a session ever reports a
+// converted presentment currency: Stripe's current API keeps the integration
+// currency on the session (with presentment_details alongside), and older API
+// versions put the presentment currency on the session with the AED source
+// amount under currency_conversion.
+export const settledOrderAmount = (session) => {
+  const conversion = session.currency_conversion;
+  if (conversion && String(conversion.source_currency || '').toLowerCase() === 'aed' && Number.isFinite(Number(conversion.amount_total))) {
+    return { amount_total: Number(conversion.amount_total), currency: 'aed' };
+  }
+  return { amount_total: session.amount_total || 0, currency: String(session.currency || 'aed').toLowerCase() };
+};
+
 const sendOrderEmail = async (session) => {
   const metadata = session.metadata || {};
   const orderId = metadata.order_id || session.client_reference_id || session.id;
   const customerEmail = session.customer_details?.email || session.customer_email || '';
-  const amount = new Intl.NumberFormat('ar-AE', { style: 'currency', currency: 'AED' }).format((session.amount_total || 0) / 100);
+  const settled = settledOrderAmount(session);
+  const amount = new Intl.NumberFormat('ar-AE', { style: 'currency', currency: settled.currency.toUpperCase() }).format(settled.amount_total / 100);
   const shippingAmount = new Intl.NumberFormat('ar-AE', { style: 'currency', currency: 'AED' }).format(Number(metadata.shipping_amount || 0) / 100);
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -122,8 +138,7 @@ const saveOrder = async (session) => {
       items,
       product_amount: Number(metadata.product_amount || 0),
       shipping_amount: Number(metadata.shipping_amount || 0),
-      amount_total: session.amount_total || 0,
-      currency: session.currency || 'aed',
+      ...settledOrderAmount(session),
       status: 'paid',
       stripe_session_id: session.id,
       stripe_payment_intent_id: session.payment_intent || null,
