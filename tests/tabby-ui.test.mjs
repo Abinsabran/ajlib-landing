@@ -223,3 +223,21 @@ test('the Tabby script loads before the page runs its payment-return handler', (
   const initAt = html.indexOf('handlePaymentReturn().then');
   assert.ok(tabbyAt > 0 && initAt > tabbyAt, 'tabby-checkout must come before the load-time handlePaymentReturn() call');
 });
+
+test('Production stays card-only: Tabby is offered only when the server runs in Tabby test mode', async () => {
+  // The backend reports available:false unless TABBY_MODE is exactly 'test',
+  // and the storefront only reveals Tabby on available===true. Production must
+  // therefore never have TABBY_MODE=test.
+  const { isTabbyPotentiallyAvailable } = await import('../api/_lib/tabby-client.js');
+  const saved = { mode: process.env.TABBY_MODE, pub: process.env.TABBY_PUBLIC_KEY, sec: process.env.TABBY_SECRET_KEY };
+  try {
+    process.env.TABBY_PUBLIC_KEY = 'pk_x'; process.env.TABBY_SECRET_KEY = 'sk_x';
+    for (const mode of [undefined, '', 'live', 'production', 'TEST']) {
+      if (mode === undefined) delete process.env.TABBY_MODE; else process.env.TABBY_MODE = mode;
+      assert.equal(isTabbyPotentiallyAvailable({ countryCode: 'AE', currency: 'AED', amountFils: 13500 }), false, `mode ${mode}`);
+    }
+  } finally {
+    for (const [k, v] of [['TABBY_MODE', saved.mode], ['TABBY_PUBLIC_KEY', saved.pub], ['TABBY_SECRET_KEY', saved.sec]]) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+  }
+  assert.match(html, /if\(seq===tabbySeq\)setTabbyOffered\(a\.available===true\)/);
+});
