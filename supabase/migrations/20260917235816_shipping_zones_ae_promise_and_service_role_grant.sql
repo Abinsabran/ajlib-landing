@@ -1,6 +1,6 @@
--- PREPARED PLAN — NOT EXECUTED, NOT YET A MIGRATION.
---
--- Deliberately saved with a .txt extension and a PENDING_APPROVAL_ prefix so
+-- Approved: correct the stale UAE delivery window, then grant the server
+-- read access — in that order, within one transaction, so the stale row is
+-- never authoritative.
 -- that `supabase db push` CANNOT pick it up by accident. Rename it to a
 -- proper <timestamp>_name.sql only after approval.
 --
