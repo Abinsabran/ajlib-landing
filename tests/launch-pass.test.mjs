@@ -109,7 +109,8 @@ test('shipping / returns / privacy are compact accordions', () => {
   const policies = html.slice(html.indexOf('id="policies"'), html.indexOf('</section>', html.indexOf('id="policies"')));
   assert.equal((policies.match(/<details>/g) || []).length, 3);
   for (const title of ['الشحن والتوصيل', 'الاستبدال', 'الخصوصية والجمارك']) assert.ok(policies.includes(`<summary>${title}</summary>`));
-  assert.match(policies, /7–14 يوم عمل/);
+  // Country-neutral: the real delivery window comes from the server quote.
+  assert.ok(policies.includes('خيارات الشحن والتكلفة ومدة التوصيل تظهر عند اختيار دولة التوصيل.'));
 });
 
 test('colour cards become a horizontal carousel on phones', () => {

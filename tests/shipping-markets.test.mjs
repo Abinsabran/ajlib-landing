@@ -147,3 +147,17 @@ test('the mobile app country lists equal the backend whitelist', { skip: !exists
   assert.deepEqual([...mobile.PRIMARY_DELIVERY_MARKETS], [...SHIPPING_COUNTRIES]);
   assert.deepEqual([...mobile.FALLBACK_SHIPPING_COUNTRIES], [...SHIPPING_COUNTRIES]);
 });
+
+// ---- shipping copy ----------------------------------------------------------
+
+const catalog = readFileSync(new URL('../assets/store-translations.js', import.meta.url), 'utf8');
+
+test('customer-facing shipping copy no longer promises worldwide delivery and names no countries', () => {
+  for (const text of [html, catalog]) {
+    assert.doesNotMatch(text, /جميع دول العالم|شحن عالمي|أي دولة|Worldwide delivery|Worldwide shipping|deliver worldwide|any other country/);
+  }
+  assert.ok(html.includes('<div class="badge">✓ شحن سريع ومباشر إلى بابك</div>'));
+  assert.ok(html.includes('<p class="note">خيارات الشحن والتكلفة ومدة التوصيل تظهر عند اختيار دولة التوصيل.</p>'));
+  assert.ok(catalog.includes("'✓ شحن سريع ومباشر إلى بابك': '✓ Fast, direct delivery to your door'"));
+  assert.ok(catalog.includes("'خيارات الشحن والتكلفة ومدة التوصيل تظهر عند اختيار دولة التوصيل.': 'Shipping options, cost, and delivery estimates are shown after selecting your delivery country.'"));
+});
