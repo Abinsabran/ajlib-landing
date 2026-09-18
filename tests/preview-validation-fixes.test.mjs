@@ -245,7 +245,7 @@ const reviewWorld = ({ balance = 0 } = {}) => {
 const reviewOrderRow = () => ({
   id: 'order-review-1', order_number: 'AJ-REVIEW-1', status: 'paid',
   items: [{ variant: 'أسود-L', quantity: 10 }],
-  shipping_street: '1 Test St', shipping_city: 'دبي', shipping_country_code: 'AE',
+  customer_name: 'Test Buyer', customer_phone: '+971500000000', shipping_street: '1 Test St', shipping_city: 'دبي', shipping_country_code: 'AE',
   product_amount: 26900, shipping_amount: 0, amount_total: 26900,
   stripe_session_id: 'tabby_pay_review_1',
   fulfillment_status: null, fulfillment_external_order_id: null
@@ -255,7 +255,7 @@ test('an INSUFFICIENT_CJ_BALANCE block persists the selected route, amount requi
   await withEnv({ SUPABASE_URL: 'https://supabase.test', SUPABASE_SECRET_KEY: 'k', CJ_API_KEY: 'cj' }, async () => {
     const { patches, restore } = reviewWorld({ balance: 0 });
     try {
-      const result = await runFulfillmentPreparation(reviewOrderRow(), { maxDeliveryDays: 14 });
+      const result = await runFulfillmentPreparation(reviewOrderRow(), { maxDeliveryDays: 14, paymentMode: 'balance' });
       assert.equal(result.reason, 'INSUFFICIENT_CJ_BALANCE');
       const p = patches[0];
       assert.equal(p.fulfillment_status, FULFILLMENT_STATE.REVIEW_REQUIRED);

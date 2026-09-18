@@ -91,7 +91,7 @@ const baseOrder = (over = {}) => ({
 
 const world = ({ orders = [baseOrder()], balanceUSD = 85, methods = US_10_METHODS, cj = {} } = {}) => {
   const db = new Map(orders.map(o => [o.id, { ...o }]));
-  const calls = { create: [], cj: [], dbPatches: [], orderReads: 0 };
+  const calls = { create: [], cj: [], dbPatches: [], orderReads: 0, emails: [] };
   const matches = (row, params) => {
     for (const [key, value] of params) {
       if (['select', 'order', 'limit'].includes(key)) continue;
@@ -119,6 +119,7 @@ const world = ({ orders = [baseOrder()], balanceUSD = 85, methods = US_10_METHOD
         return ok((options.headers?.Prefer || '').includes('representation') ? rows.map(r => ({ id: r.id })) : []);
       }
     }
+    if (u.hostname === 'api.resend.com') { calls.emails.push({ headers: options.headers, ...JSON.parse(options.body) }); return ok({ id: 'email_1' }); }
     if (u.hostname.includes('cjdropshipping')) {
       calls.cj.push(u.pathname);
       if (u.pathname.endsWith('/authentication/getAccessToken')) return ok({ code: 200, result: true, data: { accessToken: 'tok', accessTokenExpiryDate: new Date(Date.now() + 3600_000).toISOString() } });
@@ -127,7 +128,7 @@ const world = ({ orders = [baseOrder()], balanceUSD = 85, methods = US_10_METHOD
       if (u.pathname.endsWith('/shopping/pay/getBalance')) return ok({ code: 200, result: true, data: { amount: balanceUSD, freezeAmount: 0, noWithdrawalAmount: 0 } });
       if (u.pathname.endsWith('/shopping/order/createOrderV2')) {
         calls.create.push(JSON.parse(options.body));
-        return ok(cj.createResponse || { code: 200, result: true, data: { orderId: 'CJ-ORDER-1', orderNumber: JSON.parse(options.body).orderNumber, orderStatus: 'CREATED' } });
+        return ok(cj.createResponse || { code: 200, result: true, data: { orderId: 'CJ-ORDER-1', orderNumber: JSON.parse(options.body).orderNumber, cjPayUrl: 'https://cjdropshipping.com/pay/CJ-ORDER-1', orderStatus: 'UNPAID' } });
       }
       if (u.pathname.endsWith('/shopping/order/getOrderDetail')) return ok(cj.detail || { code: 200, result: true, data: { orderStatus: 'CREATED' } });
       if (u.pathname.endsWith('/logistic/trackInfo')) { calls.track = u.searchParams.get('trackNumber'); return ok(cj.track || { code: 200, result: true, data: [] }); }
@@ -139,11 +140,13 @@ const world = ({ orders = [baseOrder()], balanceUSD = 85, methods = US_10_METHOD
 };
 
 const ENV = { SUPABASE_URL: 'https://db.example.co', SUPABASE_SECRET_KEY: 'service_x', SUPABASE_PUBLISHABLE_KEY: 'pub_x', CJ_API_KEY: 'cj_x' };
+// Creation switches and email are OFF unless a test turns them on.
+const SWITCHES = ['CJ_AUTO_CREATE_ENABLED', 'CJ_LIVE_ORDER_CREATION_ENABLED', 'RESEND_API_KEY'];
 const run = async (w, { token = 'admin-token', method = 'POST', body = {}, env = {} } = {}) => {
   const saved = {}; const vars = { ...ENV, ...env };
-  for (const k of [...Object.keys(vars), 'CJ_LIVE_ORDER_CREATION_ENABLED']) saved[k] = process.env[k];
+  for (const k of [...Object.keys(vars), ...SWITCHES]) saved[k] = process.env[k];
   Object.assign(process.env, vars);
-  if (!('CJ_LIVE_ORDER_CREATION_ENABLED' in env)) delete process.env.CJ_LIVE_ORDER_CREATION_ENABLED;
+  for (const k of SWITCHES) if (!(k in env)) delete process.env[k];
   const original = globalThis.fetch; globalThis.fetch = w.fetch;
   const res = { statusCode: null, body: null, headers: {}, status(c) { this.statusCode = c; return this; }, json(b) { this.body = b; return this; }, setHeader(k, v) { this.headers[k] = v; } };
   try {
@@ -155,13 +158,14 @@ const run = async (w, { token = 'admin-token', method = 'POST', body = {}, env =
   }
 };
 const ORDER_ID = baseOrder().id;
+const AUTO = { CJ_AUTO_CREATE_ENABLED: 'true' };
 
 // ---- access ----------------------------------------------------------------------------
 
 test('admin-only: no token 401, a customer 403 — before any order or CJ call', async () => {
   const w = world();
   assert.equal((await run(w, { token: null, body: { action: 'status', order_id: ORDER_ID } })).statusCode, 401);
-  const customer = await run(w, { token: 'customer-token', body: { action: 'submit', order_id: ORDER_ID, confirm_order_number: 'AJ10000001' }, env: { CJ_LIVE_ORDER_CREATION_ENABLED: 'true' } });
+  const customer = await run(w, { token: 'customer-token', body: { action: 'create', order_id: ORDER_ID, confirm_order_number: 'AJ10000001' }, env: AUTO });
   assert.equal(customer.statusCode, 403);
   assert.equal(w.calls.orderReads, 0);
   assert.equal(w.calls.cj.length, 0);
@@ -173,20 +177,24 @@ test('the admin route is reachable only through the commerce dispatcher and is n
   assert.ok(vercel.rewrites.some(r => r.source === '/api/admin-fulfillment' && r.destination === '/api/commerce?resource=admin-fulfillment'));
   const res = await run(world(), { body: { action: 'status', order_id: ORDER_ID } });
   assert.equal(res.headers['Cache-Control'], 'private, no-store, max-age=0');
+  assert.equal(res.body.payment_mode, 'manual');
 });
 
-// ---- re-preparation ----------------------------------------------------------------------
+// ---- re-preparation (recovery) --------------------------------------------------------------
 
-test('an order stuck in REVIEW_REQUIRED (empty wallet) becomes READY_FOR_CJ once the wallet is funded', async () => {
-  const w = world({ balanceUSD: 85 });
+test('reprepare: an order held in REVIEW_REQUIRED becomes READY_FOR_CJ — the wallet is neither read nor required', async () => {
+  const w = world({ balanceUSD: 0 });
   const res = await run(w, { body: { action: 'reprepare', order_id: ORDER_ID } });
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.outcome, 'READY_FOR_CJ');
+  assert.equal(res.body.paymentMode, 'manual');
   assert.equal(res.body.route.method, 'YunExpress Ordinary');
   assert.equal(res.body.requiredUSD, 49.78); // 10 x 2.21 + 27.48 (live YunExpress) + 10 x 0.02
   assert.equal(res.body.margin.band, 'GREEN');
-  assert.equal(res.body.payload.payType, 2);
+  assert.equal(res.body.balance, null);
+  assert.equal(res.body.payload.payType, 1, 'CJ page payment: the order is created unpaid');
   assert.equal(res.body.payload.orderNumber, 'AJLIB-AJ10000001');
+  assert.ok(!w.calls.cj.some(p => p.endsWith('/shopping/pay/getBalance')), 'the wallet is not read');
   const row = w.db.get(ORDER_ID);
   assert.equal(row.fulfillment_status, 'READY_FOR_CJ');
   assert.equal(row.fulfillment_error, null);
@@ -194,21 +202,12 @@ test('an order stuck in REVIEW_REQUIRED (empty wallet) becomes READY_FOR_CJ once
   assert.equal(w.calls.create.length, 0, 're-preparation never creates a CJ order');
 });
 
-test('the low-balance warning does not block an affordable order; an insufficient balance does', async () => {
+test('the low-balance policy: warning at 150 AED, never blocking (only used in the optional wallet mode)', () => {
   assert.equal(CJ_BALANCE_LOW_WARNING_AED, 150);
-  // $85 - $49.78 leaves ~129 AED: below the 150 AED warning, still affordable.
-  const warned = await run(world({ balanceUSD: 85 }), { body: { action: 'reprepare', order_id: ORDER_ID } });
-  assert.equal(warned.body.outcome, 'READY_FOR_CJ');
-  assert.equal(warned.body.balance.lowBalanceWarning, true);
-  const w = world({ balanceUSD: 49.77 });
-  const blocked = await run(w, { body: { action: 'reprepare', order_id: ORDER_ID } });
-  assert.equal(blocked.body.outcome, 'REVIEW_REQUIRED');
-  assert.equal(blocked.body.reason, 'INSUFFICIENT_CJ_BALANCE');
-  assert.equal(w.db.get(ORDER_ID).fulfillment_status, 'REVIEW_REQUIRED');
 });
 
 test('re-preparation is refused once a CJ order exists or while a submission is in flight', async () => {
-  for (const over of [{ fulfillment_external_order_id: 'CJ-9', fulfillment_status: 'CREATED' }, { fulfillment_status: 'SUBMITTING' }, { fulfillment_status: 'SHIPPED' }]) {
+  for (const over of [{ fulfillment_external_order_id: 'CJ-9', fulfillment_status: 'WAITING_FOR_CJ_PAYMENT' }, { fulfillment_status: 'SUBMITTING' }, { fulfillment_status: 'SHIPPED' }]) {
     const w = world({ orders: [baseOrder(over)] });
     const res = await run(w, { body: { action: 'reprepare', order_id: ORDER_ID } });
     assert.equal(res.statusCode, 409, JSON.stringify(over));
@@ -216,54 +215,68 @@ test('re-preparation is refused once a CJ order exists or while a submission is 
   }
 });
 
-// ---- submission ----------------------------------------------------------------------------
+// ---- create (recovery) ----------------------------------------------------------------------
 
 const ready = () => baseOrder({ fulfillment_status: 'READY_FOR_CJ', fulfillment_error: null });
-const submitBody = { action: 'submit', order_id: ORDER_ID, confirm_order_number: 'AJ10000001' };
+const createBody = { action: 'create', order_id: ORDER_ID, confirm_order_number: 'AJ10000001' };
 
-test('submit requires CJ_LIVE_ORDER_CREATION_ENABLED=true: with it off nothing is claimed or called', async () => {
+test('create requires CJ_AUTO_CREATE_ENABLED=true: with it off nothing is claimed or called', async () => {
   const w = world({ orders: [ready()] });
-  const res = await run(w, { body: submitBody });
+  // The wallet switch alone does not unlock unpaid creation.
+  const res = await run(w, { body: createBody, env: { CJ_LIVE_ORDER_CREATION_ENABLED: 'true' } });
   assert.equal(res.statusCode, 409);
   assert.equal(res.body.outcome, 'LIVE_ORDER_CREATION_DISABLED');
+  assert.equal(res.body.flag, 'CJ_AUTO_CREATE_ENABLED');
   assert.equal(w.calls.dbPatches.length, 0);
   assert.equal(w.calls.cj.length, 0);
   assert.equal(w.db.get(ORDER_ID).fulfillment_status, 'READY_FOR_CJ');
 });
 
-test('submit requires typing the exact order number', async () => {
+test('create requires typing the exact order number', async () => {
   const w = world({ orders: [ready()] });
-  const res = await run(w, { body: { ...submitBody, confirm_order_number: 'AJ10000002' }, env: { CJ_LIVE_ORDER_CREATION_ENABLED: 'true' } });
+  const res = await run(w, { body: { ...createBody, confirm_order_number: 'AJ10000002' }, env: AUTO });
   assert.equal(res.statusCode, 400);
   assert.equal(w.calls.create.length, 0);
 });
 
-test('submit sends exactly one createOrderV2 (payType=2, preferred route), records the CJ id, and a second submit is refused', async () => {
-  const w = world({ orders: [ready()] });
-  const env = { CJ_LIVE_ORDER_CREATION_ENABLED: 'true' };
-  const first = await run(w, { body: submitBody, env });
+test('create sends exactly one UNPAID createOrderV2 (payType 1, preferred route), records WAITING_FOR_CJ_PAYMENT, alerts the owner, and a second create is refused', async () => {
+  const w = world({ orders: [ready()], balanceUSD: 0 });
+  const env = { ...AUTO, RESEND_API_KEY: 're_test' };
+  const first = await run(w, { body: createBody, env });
   assert.equal(first.statusCode, 200);
-  assert.equal(first.body.outcome, 'SUBMITTED');
+  assert.equal(first.body.outcome, 'CREATED_AWAITING_PAYMENT');
   assert.equal(w.calls.create.length, 1);
   const payload = w.calls.create[0];
-  assert.equal(payload.payType, 2);
+  assert.equal(payload.payType, 1);
   assert.equal(payload.logisticName, 'YunExpress Ordinary');
   assert.equal(payload.orderNumber, 'AJLIB-AJ10000001');
   assert.deepEqual(payload.products, FIRST_ORDER_ITEMS.map(i => ({ vid: vidOf(i.variant), quantity: i.quantity })));
   assert.equal(payload.products.reduce((n, p) => n + p.quantity, 0), 10);
+  assert.ok(!w.calls.cj.some(p => /getBalance|payBalance/.test(p)), 'no wallet read or payment');
   const row = w.db.get(ORDER_ID);
   assert.equal(row.fulfillment_external_order_id, 'CJ-ORDER-1');
-  assert.notEqual(row.fulfillment_status, 'SUBMITTING');
-  const second = await run(w, { body: submitBody, env });
+  assert.equal(row.fulfillment_status, 'WAITING_FOR_CJ_PAYMENT');
+  assert.equal(row.fulfillment_payment_url, 'https://cjdropshipping.com/pay/CJ-ORDER-1');
+  assert.equal(row.status, 'processing');
+  assert.equal(serializeOrderForCustomer(row).status, 'PREPARING_ORDER');
+  // Owner alert: one email, to the internal address, with everything needed to pay.
+  assert.equal(w.calls.emails.length, 1);
+  const email = w.calls.emails[0];
+  assert.deepEqual(email.to, ['support@ajlib.store']);
+  for (const text of ['PAY THIS ORDER IN CJ', 'WAITING_FOR_CJ_PAYMENT', 'AJ10000001', 'CJ-ORDER-1', 'Lake Forest', '10 pieces', 'YunExpress Ordinary', 'USD 49.78', 'https://cjdropshipping.com/pay/CJ-ORDER-1']) {
+    assert.ok(email.html.includes(text), `alert missing ${text}`);
+  }
+  assert.ok(row.fulfillment_alert_sent_at, 'alert recorded so it is sent once');
+  const second = await run(w, { body: createBody, env });
   assert.equal(second.statusCode, 409);
   assert.equal(second.body.outcome, 'ALREADY_SUBMITTED');
   assert.equal(w.calls.create.length, 1, 'never a second CJ order');
+  assert.equal(w.calls.emails.length, 1, 'never a second alert');
 });
 
-test('two simultaneous submits for the same order create exactly one CJ order', async () => {
+test('two simultaneous creates for the same order make exactly one CJ order', async () => {
   const w = world({ orders: [ready()] });
-  const env = { CJ_LIVE_ORDER_CREATION_ENABLED: 'true' };
-  const [a, b] = await Promise.all([run(w, { body: submitBody, env }), run(w, { body: submitBody, env })]);
+  const [a, b] = await Promise.all([run(w, { body: createBody, env: AUTO }), run(w, { body: createBody, env: AUTO })]);
   assert.equal(w.calls.create.length, 1);
   assert.deepEqual([a.statusCode, b.statusCode].sort(), [200, 409]);
 });
@@ -271,30 +284,31 @@ test('two simultaneous submits for the same order create exactly one CJ order', 
 test('one order at a time: while another order is SUBMITTING, nothing else is claimed', async () => {
   const other = baseOrder({ id: '22222222-2222-4222-8222-222222222222', order_number: 'AJ10000002', fulfillment_status: 'SUBMITTING' });
   const w = world({ orders: [ready(), other] });
-  const res = await run(w, { body: submitBody, env: { CJ_LIVE_ORDER_CREATION_ENABLED: 'true' } });
+  const res = await run(w, { body: createBody, env: AUTO });
   assert.equal(res.statusCode, 409);
   assert.equal(res.body.outcome, 'ANOTHER_SUBMISSION_IN_PROGRESS');
   assert.equal(w.db.get(ORDER_ID).fulfillment_status, 'READY_FOR_CJ');
   assert.equal(w.calls.create.length, 0);
 });
 
-test('submit re-checks live: an order whose wallet emptied since preparation is not sent', async () => {
-  const w = world({ orders: [ready()], balanceUSD: 10 });
-  const res = await run(w, { body: submitBody, env: { CJ_LIVE_ORDER_CREATION_ENABLED: 'true' } });
+test('create re-checks live: a margin that fell below GREEN is not sent, and the owner is told to review', async () => {
+  const w = world({ orders: [baseOrder({ fulfillment_status: 'READY_FOR_CJ', product_amount: 15000, shipping_amount: 0 })] });
+  const res = await run(w, { body: createBody, env: { ...AUTO, RESEND_API_KEY: 're_test' } });
   assert.equal(res.body.outcome, 'BLOCKED_ON_RECHECK');
-  assert.equal(res.body.reason, 'INSUFFICIENT_CJ_BALANCE');
   assert.equal(w.calls.create.length, 0);
   assert.equal(w.db.get(ORDER_ID).fulfillment_status, 'REVIEW_REQUIRED');
+  assert.equal(w.calls.emails.length, 1);
+  assert.match(w.calls.emails[0].subject, /review AJLIB order AJ10000001/);
 });
 
-test('only an admin action can submit: no payment path or other module calls submitReadyOrder', async () => {
-  const files = ['api/stripe-webhook.js', 'api/commerce.js', 'api/_lib/fulfillment-runner.js', 'api/checkout-session.js', 'api/cj-webhook.js'];
+test('only the automatic path and admin recovery reach the submitter; the admin checks the creation switch first', async () => {
+  const files = ['api/stripe-webhook.js', 'api/commerce.js', 'api/_lib/fulfillment-runner.js', 'api/checkout-session.js', 'api/cj-webhook.js', 'api/_lib/admin-fulfillment.js'];
   for (const file of files) {
     const code = (await readFile(new URL(`../${file}`, import.meta.url), 'utf8')).replace(/\/\/[^\n]*/g, '');
-    assert.ok(!/submitReadyOrder\(/.test(code), `${file} must not submit`);
+    assert.ok(!/submitReadyOrder\(/.test(code), `${file} must not call the submitter directly`);
   }
   const admin = await readFile(new URL('../api/_lib/admin-fulfillment.js', import.meta.url), 'utf8');
-  assert.match(admin, /if \(!isLiveOrderCreationEnabled\(\)\) return/);
+  assert.match(admin, /if \(!isCreationAllowedFor\(payType\)\) return/);
 });
 
 // ---- route policy --------------------------------------------------------------------------

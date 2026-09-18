@@ -27,14 +27,51 @@ export const AED_TO_USD = AED_EXCHANGE_RATES.USD;
 export const usdToAed = (usd) => Number(usd) / AED_TO_USD;
 export const aedToUsd = (aed) => Number(aed) * AED_TO_USD;
 
-// CJ's documented payType enum (official docs, shopping.html "Create Order"):
-//   1 (or omitted) = page payment, 2 = balance payment, 3 = create only.
-// AJLIB's approved model is CJ Balance, so automatic fulfillment uses 2.
-// 3 is explicitly NOT used for automatic fulfillment: it would leave a
-// customer-paid AJLIB order sitting unpaid inside CJ, which is exactly the
-// silent-failure mode the operating model forbids.
+// CJ's documented payType enum (official docs, shopping.html "Create Order V2",
+// re-read 2026-09-18):
+//   1 (or omitted) = "page payment (default), and cjPayUrl will be returned"
+//   2 = "balance payment ... add-to-cart, order confirmation, and balance deduction"
+//   3 = "create the order only without initiating payment, add-to-cart, or order confirmation"
+// Launch model: 1 — a real, confirmed CJ order the owner pays manually; the
+// unpaid state is tracked (WAITING_FOR_CJ_PAYMENT) and alerted, never silent.
 export const CJ_PAY_TYPE_BALANCE = 2;
 export const CJ_PAY_TYPE_CREATE_ONLY = 3;
+// payType 1 (CJ's default): "page payment, and cjPayUrl will be returned".
+// The order is created and confirmed but NOT paid by the API — nothing is
+// deducted; the owner pays that specific order in CJ (or via cjPayUrl).
+export const CJ_PAY_TYPE_PAGE = 1;
+
+// LAUNCH MODEL (approved 2026-09-18): 'manual' — AJLIB creates the CJ order
+// unpaid (payType 1) and the owner pays it in CJ; the wallet is neither
+// required nor checked. 'balance' (payType 2, wallet-paid) is kept only as an
+// optional future mode and must be chosen explicitly.
+export const CJ_PAYMENT_MODE = process.env.CJ_PAYMENT_MODE === 'balance' ? 'balance' : 'manual';
+export const payTypeForMode = (mode = CJ_PAYMENT_MODE) => (mode === 'balance' ? CJ_PAY_TYPE_BALANCE : CJ_PAY_TYPE_PAGE);
+
+// Destinations whose CJ order needs a state/province and a postal code.
+// Only markets confirmed so far; others are not assumed to need them
+// (e.g. UAE addresses have no postal code).
+export const STATE_AND_ZIP_REQUIRED = Object.freeze(['US']);
+const ZIP_FORMAT = Object.freeze({ US: /^\d{5}(-\d{4})?$/ });
+// Same character set and length as the checkout's phone field.
+const PHONE_FORMAT = /^\+?[0-9 ()-]{7,24}$/;
+
+// Everything CJ needs to print a label, checked before any CJ call.
+// Returns the list of missing/invalid fields (empty = complete).
+export const shippingProblems = (orderRow) => {
+  const t = (value) => String(value ?? '').trim();
+  const code = t(orderRow.shipping_country_code).toUpperCase();
+  const problems = [];
+  if (!t(orderRow.customer_name)) problems.push('name');
+  if (!PHONE_FORMAT.test(t(orderRow.customer_phone))) problems.push('phone');
+  if (!/^[A-Z]{2}$/.test(code)) problems.push('country');
+  if (STATE_AND_ZIP_REQUIRED.includes(code)) {
+    if (!t(orderRow.shipping_region)) problems.push('state');
+    const zip = t(orderRow.shipping_postal_code);
+    if (!zip || (ZIP_FORMAT[code] && !ZIP_FORMAT[code].test(zip))) problems.push('zip');
+  }
+  return problems;
+};
 
 export class FulfillmentBlockedError extends Error {
   constructor(reason, details = {}) {
@@ -441,7 +478,10 @@ export const buildCjOrderPayload = ({
 export const prepareFulfillment = async (orderRow, {
   minAcceptableMarginPercent, aedToUsdRate, additionalFulfillmentCostUSD,
   maxDeliveryDays, // AJLIB's existing promise for this destination (zone max_days)
-  checkBalance = true
+  paymentMode = CJ_PAYMENT_MODE,
+  // The wallet only matters when CJ is paid from it. In the launch 'manual'
+  // mode it is never read and can never block.
+  checkBalance = paymentMode === 'balance'
 } = {}) => {
   if (alreadyHasFulfillmentOrder(orderRow)) {
     throw new FulfillmentBlockedError('ALREADY_FULFILLED', { fulfillment_external_order_id: orderRow.fulfillment_external_order_id });
@@ -472,6 +512,11 @@ export const prepareFulfillment = async (orderRow, {
     throw new FulfillmentBlockedError('MISSING_SHIPPING_STREET', {
       note: 'No structured street line on this order — requires manual review; the street must never be inferred from the flattened address'
     });
+  }
+
+  const problems = shippingProblems(orderRow);
+  if (problems.length) {
+    throw new FulfillmentBlockedError('INCOMPLETE_SHIPPING_ADDRESS', { missing: problems });
   }
 
   // The approved policy is "cheapest appropriate route that satisfies
@@ -573,8 +618,8 @@ export const prepareFulfillment = async (orderRow, {
     shippingZip: orderRow.shipping_postal_code,
     shippingPhone: orderRow.customer_phone,
     email: orderRow.customer_email,
-    payType: CJ_PAY_TYPE_BALANCE
+    payType: payTypeForMode(paymentMode)
   });
 
-  return { ready: true, resolved, cjProductCostUSD, requiredUSD, logistics: selection, margin, balance, payload };
+  return { ready: true, resolved, cjProductCostUSD, requiredUSD, logistics: selection, margin, balance, payload, paymentMode };
 };

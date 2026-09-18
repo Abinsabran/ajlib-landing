@@ -2,28 +2,83 @@
   "functions": {
     "api/checkout-session.js": {
       "maxDuration": 10
+    },
+    "api/stripe-webhook.js": {
+      "maxDuration": 60
+    },
+    "api/commerce.js": {
+      "maxDuration": 60
     }
   },
   "rewrites": [
-    { "source": "/privacy", "destination": "/legal.html" },
-    { "source": "/terms", "destination": "/legal.html" },
-    { "source": "/returns", "destination": "/legal.html" },
-    { "source": "/account-deletion", "destination": "/legal.html" },
-    { "source": "/api/order-quote", "destination": "/api/commerce?resource=order-quote" },
-    { "source": "/api/catalog", "destination": "/api/commerce?resource=catalog" },
-    { "source": "/api/currency", "destination": "/api/commerce?resource=currency" },
-    { "source": "/api/tabby-availability", "destination": "/api/commerce?resource=tabby-availability" },
-    { "source": "/api/tabby-checkout", "destination": "/api/commerce?resource=tabby-checkout" },
-    { "source": "/api/tabby-verify", "destination": "/api/commerce?resource=tabby-verify" },
-    { "source": "/api/admin-fulfillment", "destination": "/api/commerce?resource=admin-fulfillment" }
+    {
+      "source": "/privacy",
+      "destination": "/legal.html"
+    },
+    {
+      "source": "/terms",
+      "destination": "/legal.html"
+    },
+    {
+      "source": "/returns",
+      "destination": "/legal.html"
+    },
+    {
+      "source": "/account-deletion",
+      "destination": "/legal.html"
+    },
+    {
+      "source": "/api/order-quote",
+      "destination": "/api/commerce?resource=order-quote"
+    },
+    {
+      "source": "/api/catalog",
+      "destination": "/api/commerce?resource=catalog"
+    },
+    {
+      "source": "/api/currency",
+      "destination": "/api/commerce?resource=currency"
+    },
+    {
+      "source": "/api/tabby-availability",
+      "destination": "/api/commerce?resource=tabby-availability"
+    },
+    {
+      "source": "/api/tabby-checkout",
+      "destination": "/api/commerce?resource=tabby-checkout"
+    },
+    {
+      "source": "/api/tabby-verify",
+      "destination": "/api/commerce?resource=tabby-verify"
+    },
+    {
+      "source": "/api/admin-fulfillment",
+      "destination": "/api/commerce?resource=admin-fulfillment"
+    },
+    {
+      "source": "/api/fulfillment-sync",
+      "destination": "/api/commerce?resource=fulfillment-sync"
+    }
   ],
   "headers": [
     {
       "source": "/(.*)",
       "headers": [
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        }
       ]
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/fulfillment-sync",
+      "schedule": "0 6 * * *"
     }
   ]
 }

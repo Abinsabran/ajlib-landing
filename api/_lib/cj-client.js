@@ -372,13 +372,40 @@ export const getTrackInfo = async (trackNumber) => throttleCj(async () => {
 // network activity, so a missing or mistyped variable fails closed. This is
 // checked here, at the call itself, not only by callers, so no future code
 // path can reach createOrderV2 without it.
+// Two separate switches, one per kind of createOrderV2 call:
+//
+//   CJ_AUTO_CREATE_ENABLED=true   allows creating a CJ order that is NOT paid
+//                                 by the API (payType 1 = page payment, the
+//                                 launch model: the owner pays it in CJ; or
+//                                 payType 3 = create only). Spends nothing.
+//   CJ_LIVE_ORDER_CREATION_ENABLED=true  allows payType 2 = CJ Balance
+//                                 payment, which deducts the wallet
+//                                 immediately and irreversibly. Kept only for
+//                                 a possible future wallet mode; nothing in
+//                                 the launch flow uses it.
+//
+// Both default off. Any other payType is refused outright.
 export const CJ_LIVE_ORDER_FLAG = 'CJ_LIVE_ORDER_CREATION_ENABLED';
+export const CJ_AUTO_CREATE_FLAG = 'CJ_AUTO_CREATE_ENABLED';
 export const isLiveOrderCreationEnabled = () => process.env[CJ_LIVE_ORDER_FLAG] === 'true';
+export const isAutoCreateEnabled = () => process.env[CJ_AUTO_CREATE_FLAG] === 'true';
+
+// Which switch governs a given payType (null = never allowed).
+export const creationFlagFor = (payType) => {
+  if (payType === 2) return CJ_LIVE_ORDER_FLAG;
+  if (payType === 1 || payType === 3) return CJ_AUTO_CREATE_FLAG;
+  return null;
+};
+export const isCreationAllowedFor = (payType) => {
+  const flag = creationFlagFor(payType);
+  return flag !== null && process.env[flag] === 'true';
+};
 
 export class LiveOrderCreationDisabledError extends Error {
-  constructor() {
-    super(`Live CJ order creation is disabled (${CJ_LIVE_ORDER_FLAG} is not "true")`);
+  constructor(flag = CJ_LIVE_ORDER_FLAG) {
+    super(`CJ order creation is disabled (${flag} is not "true")`);
     this.code = 'LIVE_ORDER_CREATION_DISABLED';
+    this.flag = flag;
   }
 }
 
@@ -397,7 +424,7 @@ export class CjOrderRequestTimeoutError extends Error {
 export const CJ_CREATE_ORDER_TIMEOUT_MS = 8000;
 
 export const createFulfillmentOrder = async (payload, { timeoutMs = CJ_CREATE_ORDER_TIMEOUT_MS } = {}) => {
-  if (!isLiveOrderCreationEnabled()) throw new LiveOrderCreationDisabledError();
+  if (!isCreationAllowedFor(payload?.payType)) throw new LiveOrderCreationDisabledError(creationFlagFor(payload?.payType) ?? `payType ${payload?.payType}`);
 
   return throttleCj(async () => {
     const accessToken = await getAccessToken();

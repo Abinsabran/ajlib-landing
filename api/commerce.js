@@ -6,6 +6,7 @@ import { isTabbyPotentiallyAvailable, createCheckoutSession, verifyPayment } fro
 import { buildValidatedOrder, OrderValidationError } from './_lib/order-validation.js';
 import { persistPaidOrder } from './stripe-webhook.js';
 import { handleAdminFulfillment } from './_lib/admin-fulfillment.js';
+import { syncOpenOrders } from './_lib/fulfillment-tracking.js';
 
 // Grouped, provider-neutral handler for the foundation endpoints added
 // alongside the existing per-feature functions (checkout-session.js,
@@ -25,7 +26,8 @@ const RESOURCE_BY_PATH = {
   '/api/catalog': 'catalog',
   '/api/currency': 'currency',
   '/api/tabby-availability': 'tabby-availability',
-  '/api/admin-fulfillment': 'admin-fulfillment'
+  '/api/admin-fulfillment': 'admin-fulfillment',
+  '/api/fulfillment-sync': 'fulfillment-sync'
 };
 
 const resolveResource = (req) => {
@@ -354,6 +356,17 @@ const handleTabbyVerify = async (req, res) => {
 // saveStoreProduct/saveStoreVariantBatch/createProductConnection/
 // queryProductConnections remain available for any future re-sync need.
 
+// ---- fulfillment-sync (Vercel Cron only) ------------------------------------
+// Vercel sends "Authorization: Bearer <CRON_SECRET>" to cron paths when the
+// CRON_SECRET env var is set. Without it configured, or with any other caller,
+// this refuses — it is never public.
+const handleFulfillmentSync = async (req, res) => {
+  res.setHeader?.('Cache-Control', 'private, no-store, max-age=0');
+  const secret = process.env.CRON_SECRET;
+  if (!secret || String(req.headers?.authorization || '') !== `Bearer ${secret}`) return res.status(401).json({ error: 'Unauthorized' });
+  return res.status(200).json(await syncOpenOrders());
+};
+
 const HANDLERS = {
   'order-quote': handleOrderQuote,
   catalog: handleCatalog,
@@ -362,7 +375,9 @@ const HANDLERS = {
   'tabby-checkout': handleTabbyCheckout,
   'tabby-verify': handleTabbyVerify,
   // Admin-only (is_admin() checked inside, before any order is read).
-  'admin-fulfillment': handleAdminFulfillment
+  'admin-fulfillment': handleAdminFulfillment,
+  // Cron-only (CRON_SECRET checked inside).
+  'fulfillment-sync': handleFulfillmentSync
 };
 
 export default async function handler(req, res) {

@@ -214,9 +214,11 @@ test('the guard also holds once a real CJ order reference exists', () => {
   assert.equal(alreadyPrepared(null), false);
 });
 
-// ---- ZERO BALANCE MUST NOT HARM THE PAID ORDER -------------------------------
+// ---- LAUNCH MODEL: THE CJ WALLET IS NOT A REQUIREMENT ---------------------------
+// CJ orders are created unpaid and paid manually in CJ, so an empty wallet
+// must neither block preparation nor even be read.
 
-test('an empty CJ wallet marks the order for review WITHOUT altering the paid order', async () => {
+test('an empty CJ wallet does NOT block preparation, and the paid order is not altered', async () => {
   await withEnv(ENV, async () => {
     // The real current state: CJ balance is 0.
     const { calls, restore } = mockWorld({ cjBalance: 0 });
@@ -226,8 +228,9 @@ test('an empty CJ wallet marks the order for review WITHOUT altering the paid or
 
       const patches = patchesToOrders(calls);
       assert.equal(patches.length, 1);
-      assert.equal(patches[0].fulfillment_status, FULFILLMENT_STATE.REVIEW_REQUIRED);
-      assert.equal(patches[0].fulfillment_error, 'INSUFFICIENT_CJ_BALANCE');
+      assert.equal(patches[0].fulfillment_status, FULFILLMENT_STATE.READY_FOR_CJ);
+      assert.equal(patches[0].fulfillment_error, null);
+      assert.equal(calls.filter(c => String(c.url).includes('/shopping/pay/getBalance')).length, 0, 'the wallet is never read in manual mode');
 
       // Nothing about the customer's paid order may be touched.
       for (const forbidden of ['status', 'amount_total', 'product_amount', 'shipping_amount', 'items', 'paid_at', 'customer_email']) {
@@ -237,15 +240,15 @@ test('an empty CJ wallet marks the order for review WITHOUT altering the paid or
   });
 });
 
-test('a Tabby payment with an empty wallet also stays paid and is flagged for review', async () => {
+test('a Tabby payment with an empty wallet is prepared the same way (wallet not required)', async () => {
   await withEnv({ ...ENV, TABBY_MODE: 'test', TABBY_PUBLIC_KEY: 'pk', TABBY_SECRET_KEY: 'sk' }, async () => {
     const { calls, restore } = mockWorldWithTabby({ cjBalance: 0 });
     try {
       const res = await commerceHandler(tabbyVerifyReq(), makeRes());
       assert.equal(res.body.paid, true, 'the customer payment must still be confirmed');
       const patches = patchesToOrders(calls);
-      assert.equal(patches[0].fulfillment_status, FULFILLMENT_STATE.REVIEW_REQUIRED);
-      assert.equal(patches[0].fulfillment_error, 'INSUFFICIENT_CJ_BALANCE');
+      assert.equal(patches[0].fulfillment_status, FULFILLMENT_STATE.READY_FOR_CJ);
+      assert.equal(calls.filter(c => String(c.url).includes('/shopping/pay/getBalance')).length, 0);
     } finally { restore(); }
   });
 });

@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { quoteShipping } from './shipping-quote.js';
-import { runFulfillmentPreparation } from './_lib/fulfillment-runner.js';
+import { runFulfillmentPreparation, FULFILLMENT_STATE } from './_lib/fulfillment-runner.js';
+import { autoCreateAfterPayment, alertPreparationReview } from './_lib/fulfillment-auto.js';
 
 export const config = { api: { bodyParser: false } };
 
@@ -190,7 +191,16 @@ export const persistPaidOrder = async (session) => {
       const shipping = await quoteShipping(saved.value.shipping_country_code);
       maxDeliveryDays = shipping.max_days;
     } catch { maxDeliveryDays = undefined; }
-    await runFulfillmentPreparation(saved.value, { maxDeliveryDays });
+    const preparation = await runFulfillmentPreparation(saved.value, { maxDeliveryDays });
+    // Only an order that THIS delivery just prepared continues: a duplicate
+    // webhook or re-verification finds it already prepared and stops here.
+    // autoCreateAfterPayment is a no-op unless CJ_AUTO_CREATE_ENABLED=true,
+    // claims the order atomically, and never throws.
+    if (preparation?.ran && preparation.outcome === FULFILLMENT_STATE.READY_FOR_CJ) {
+      await autoCreateAfterPayment({ ...saved.value, fulfillment_status: FULFILLMENT_STATE.READY_FOR_CJ }, { maxDeliveryDays, prepared: preparation.prepared });
+    } else if (preparation?.ran && preparation.outcome === FULFILLMENT_STATE.REVIEW_REQUIRED) {
+      await alertPreparationReview(saved.value, preparation.reason);
+    }
   }
 
   // Preserve the previous contract: any failure among save/email/inventory

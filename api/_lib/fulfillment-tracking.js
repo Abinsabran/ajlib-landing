@@ -20,13 +20,23 @@ export const effectiveCjStatus = (detail) => {
 };
 
 // Pure: turns CJ's detail + tracking into the patch for the order row.
+// CJ's documented statuses before payment (CREATED/IN_CART: awaiting
+// confirmation; UNPAID: "order confirmed, payment pending").
+export const CJ_AWAITING_PAYMENT_STATUSES = Object.freeze(['CREATED', 'IN_CART', 'UNPAID']);
+const CJ_PAID_STATUSES = Object.freeze(['UNSHIPPED', 'PENDING', 'PROCESSING', 'SHIPPED', 'DELIVERED']);
+
 export const buildTrackingPatch = (orderRow, detail, track, now = new Date().toISOString()) => {
   const cjStatus = effectiveCjStatus(detail);
   const trackNumber = detail?.trackNumber || track?.trackingNumber || null;
   const carrier = track?.lastMileCarrier || detail?.trackingProvider || track?.logisticName || detail?.logisticName || null;
+  const awaitingPayment = CJ_AWAITING_PAYMENT_STATUSES.includes(cjStatus);
+  // Paid once CJ records a payment date or has moved past the unpaid states.
+  const paidNow = !orderRow.fulfillment_cj_paid_at && (Boolean(String(detail?.paymentDate ?? '').trim()) || CJ_PAID_STATUSES.includes(cjStatus));
   const patch = {
     fulfillment_last_sync_at: now,
-    ...(cjStatus ? { fulfillment_status: cjStatus } : {}),
+    // Unpaid CJ states are shown internally as the one actionable state.
+    ...(cjStatus ? { fulfillment_status: awaitingPayment ? 'WAITING_FOR_CJ_PAYMENT' : cjStatus } : {}),
+    ...(paidNow ? { fulfillment_cj_paid_at: String(detail?.paymentDate || '').trim() || now } : {}),
     ...(trackNumber ? { fulfillment_tracking_number: trackNumber } : {}),
     ...(carrier ? { fulfillment_carrier: carrier } : {}),
     ...(detail?.trackingUrl ? { fulfillment_tracking_url: detail.trackingUrl } : {})
@@ -84,6 +94,30 @@ export const syncTracking = async (orderRow) => {
       url: patch.fulfillment_tracking_url ?? null
     },
     // Exactly what the customer would see after this sync.
+    cjPaid: Boolean(patch.fulfillment_cj_paid_at || orderRow.fulfillment_cj_paid_at),
     customer: serializeOrderForCustomer({ ...orderRow, ...patch })
   };
+};
+
+// Scheduled pass (Vercel Cron -> /api/fulfillment-sync): syncs the open CJ
+// orders that have gone longest without a sync, so CJ payment, shipping and
+// delivery reach AJLIB without anyone pressing anything. Read-only on CJ.
+export const OPEN_SYNC_LIMIT = 15;
+export const syncOpenOrders = async ({ limit = OPEN_SYNC_LIMIT } = {}) => {
+  const response = await fetch(
+    `${process.env.SUPABASE_URL}/rest/v1/orders?fulfillment_external_order_id=not.is.null&fulfillment_status=not.in.(DELIVERED,CANCELLED)&select=*&order=fulfillment_last_sync_at.asc.nullsfirst&limit=${limit}`,
+    { headers: { apikey: process.env.SUPABASE_SECRET_KEY, Authorization: `Bearer ${process.env.SUPABASE_SECRET_KEY}` } }
+  );
+  if (!response.ok) return { ok: false, reason: 'ORDER_QUERY_FAILED' };
+  const rows = await response.json();
+  const results = [];
+  for (const row of Array.isArray(rows) ? rows : []) {
+    try {
+      const r = await syncTracking(row);
+      results.push({ order_number: row.order_number, synced: r.synced, cjStatus: r.cjStatus ?? null, cjPaid: r.cjPaid ?? null });
+    } catch {
+      results.push({ order_number: row.order_number, synced: false });
+    }
+  }
+  return { ok: true, checked: results.length, results };
 };

@@ -119,7 +119,7 @@ test('the missing-city guard still applies first', async () => {
 test('a historical order without a street goes to REVIEW_REQUIRED (MISSING_SHIPPING_STREET), paid order untouched', async () => {
   const patches = [];
   const fetch = async (url, options = {}) => {
-    if (String(url).includes('/rest/v1/orders')) { patches.push(JSON.parse(options.body)); return ok([]); }
+    if (String(url).includes('/rest/v1/orders')) { patches.push(JSON.parse(options.body)); return ok([{ id: 'order-us-1' }]); }
     throw new Error(`CJ must not be called: ${url}`);
   };
   const result = await withEnv({ SUPABASE_URL: 'https://db.example.co', SUPABASE_SECRET_KEY: 's' }, () => withFetch(fetch, () =>

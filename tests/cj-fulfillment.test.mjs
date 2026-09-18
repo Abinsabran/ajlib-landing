@@ -303,8 +303,8 @@ test('prepareFulfillment blocks with INSUFFICIENT_CJ_BALANCE before building any
       await assert.rejects(
         () => prepareFulfillment({
           order_number: 'AJ-BAL-1', items: [{ variant: 'أسود-L', quantity: 5 }],
-          shipping_street: '1 Test St', shipping_city: 'دبي', shipping_country_code: 'AE', product_amount: 11900, shipping_amount: 0
-        }, { maxDeliveryDays: 50 }),
+          customer_name: 'Test Buyer', customer_phone: '+971500000000', shipping_street: '1 Test St', shipping_city: 'دبي', shipping_country_code: 'AE', product_amount: 11900, shipping_amount: 0
+        }, { maxDeliveryDays: 50, paymentMode: 'balance' }),
         (err) => err instanceof FulfillmentBlockedError && err.reason === 'INSUFFICIENT_CJ_BALANCE'
       );
     } finally { globalThis.fetch = originalFetch; }
@@ -477,7 +477,7 @@ test('the pipeline never recomputes AJLIB product/shipping pricing — it only r
 const READY_ORDER_ROW = Object.freeze({
   order_number: 'AJ-DUP-1', items: [{ variant: AJLIB_VARIANT_KEYS[0], quantity: 2 }],
   shipping_street: '1 Test St', shipping_city: 'دبي', shipping_country_code: 'AE', shipping_country_name: 'الإمارات', shipping_region: 'دبي',
-  shipping_address: 'x', shipping_postal_code: null, customer_name: 'x', customer_phone: 'x', customer_email: 'x@x.com',
+  shipping_address: 'x', shipping_postal_code: null, customer_name: 'x', customer_phone: '+971500000000', customer_email: 'x@x.com',
   product_amount: 10000, shipping_amount: 1000
 });
 
@@ -641,7 +641,7 @@ test('prepareFulfillment refuses to run without an explicit delivery promise (an
   await assert.rejects(
     () => prepareFulfillment({
       order_number: 'AJ-NOPROMISE', items: [{ variant: 'أسود-L', quantity: 5 }],
-      shipping_street: '1 Test St', shipping_city: 'دبي', shipping_country_code: 'AE', product_amount: 11900, shipping_amount: 0
+      customer_name: 'Test Buyer', customer_phone: '+971500000000', shipping_street: '1 Test St', shipping_city: 'دبي', shipping_country_code: 'AE', product_amount: 11900, shipping_amount: 0
     }),
     (err) => err instanceof FulfillmentBlockedError && err.reason === 'DELIVERY_PROMISE_NOT_CONFIGURED'
   );
