@@ -73,6 +73,8 @@ const sendOrderEmail = async (session) => {
   if (!response.ok) throw new Error(`Email provider rejected request: ${response.status}`);
 };
 
+const trimmed = (value) => String(value ?? '').trim();
+
 const saveOrder = async (session) => {
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SECRET_KEY) return;
   const metadata = session.metadata || {};
@@ -97,19 +99,25 @@ const saveOrder = async (session) => {
     body: JSON.stringify({
       order_number: metadata.order_id || session.client_reference_id || session.id,
       user_id: metadata.user_id || null,
-      customer_email: customerEmail,
-      customer_name: metadata.customer_name || '',
-      customer_phone: metadata.phone || '',
-      shipping_address: metadata.address || '',
+      // Contact and shipping fields are stored trimmed: they are what CJ puts
+      // on the shipping label.
+      customer_email: trimmed(customerEmail),
+      customer_name: trimmed(metadata.customer_name),
+      customer_phone: trimmed(metadata.phone),
+      shipping_address: trimmed(metadata.address),
       shipping_address_id: /^[0-9a-f-]{36}$/i.test(metadata.address_id || '') ? metadata.address_id : null,
-      shipping_country_code: metadata.country_code || null,
-      shipping_country_name: metadata.country_name || null,
-      shipping_region: metadata.region || null,
-      // Structured city — the single shared persistence path for BOTH Stripe
-      // and Tabby (api/commerce.js tabby-verify normalizes into this same
-      // metadata shape), so neither provider can drift from the other.
-      shipping_city: metadata.city || null,
-      shipping_postal_code: metadata.postal_code || null,
+      shipping_country_code: trimmed(metadata.country_code).toUpperCase() || null,
+      shipping_country_name: trimmed(metadata.country_name) || null,
+      shipping_region: trimmed(metadata.region) || null,
+      // Structured city and street lines — the single shared persistence path
+      // for BOTH Stripe and Tabby (api/commerce.js tabby-verify normalizes into
+      // this same metadata shape), so neither provider can drift from the
+      // other. Absent (e.g. an order placed before they were captured) stays
+      // NULL: a street is never parsed back out of shipping_address.
+      shipping_city: trimmed(metadata.city) || null,
+      shipping_street: trimmed(metadata.street) || null,
+      shipping_street2: trimmed(metadata.street2) || null,
+      shipping_postal_code: trimmed(metadata.postal_code) || null,
       items,
       product_amount: Number(metadata.product_amount || 0),
       shipping_amount: Number(metadata.shipping_amount || 0),

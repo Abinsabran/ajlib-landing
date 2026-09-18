@@ -401,23 +401,32 @@ export const cjOrderNumberFor = (ajlibOrderNumber) => `AJLIB-${ajlibOrderNumber}
 // to 2 (CJ Balance) per the approved operating model — the order is paid at
 // creation from the wallet that checkCjBalance has already verified covers
 // it, so a customer-paid AJLIB order is never left unpaid inside CJ.
+// English country name for CJ's shippingCountry, derived from the ISO code.
+export const cjCountryName = (countryCode) => {
+  const code = String(countryCode ?? '').trim().toUpperCase();
+  try { return new Intl.DisplayNames(['en'], { type: 'region' }).of(code) || code; } catch { return code; }
+};
+
+// Every text field is trimmed: these are printed on the shipping label.
+const clean = (value) => (value == null ? value : String(value).trim());
+
 export const buildCjOrderPayload = ({
   ajlibOrderNumber, resolvedItems, logisticName,
   shippingCountryCode, shippingCountry, shippingProvince, shippingCity,
   shippingCustomerName, shippingAddress, shippingAddress2, shippingZip, shippingPhone,
   email, payType = CJ_PAY_TYPE_BALANCE
 }) => ({
-  orderNumber: cjOrderNumberFor(ajlibOrderNumber),
-  shippingCountryCode,
-  shippingCountry,
-  shippingProvince,
-  shippingCity,
-  shippingCustomerName,
-  shippingAddress,
-  shippingAddress2,
-  shippingZip,
-  shippingPhone,
-  email,
+  orderNumber: cjOrderNumberFor(clean(ajlibOrderNumber)),
+  shippingCountryCode: clean(shippingCountryCode)?.toUpperCase(),
+  shippingCountry: clean(shippingCountry),
+  shippingProvince: clean(shippingProvince),
+  shippingCity: clean(shippingCity),
+  shippingCustomerName: clean(shippingCustomerName),
+  shippingAddress: clean(shippingAddress),
+  shippingAddress2: clean(shippingAddress2),
+  shippingZip: clean(shippingZip),
+  shippingPhone: clean(shippingPhone),
+  email: clean(email),
   logisticName,
   fromCountryCode: 'CN',
   payType, // 2 = CJ Balance (approved automatic-fulfillment model)
@@ -450,9 +459,18 @@ export const prepareFulfillment = async (orderRow, {
   // for manual handling instead of guessed. Checked before any cost/freight
   // network call, since there's no point pricing an order whose payload
   // cannot be completed.
-  if (!orderRow.shipping_city) {
+  if (!String(orderRow.shipping_city ?? '').trim()) {
     throw new FulfillmentBlockedError('MISSING_SHIPPING_CITY', {
       note: 'Legacy order placed before structured shipping_city was persisted — requires manual review; city must never be inferred from the flattened address'
+    });
+  }
+
+  // Same rule for the street line: CJ's shippingAddress must be the street
+  // only. Orders placed before shipping_street was captured have none, and
+  // it is never parsed back out of the flattened shipping_address.
+  if (!String(orderRow.shipping_street ?? '').trim()) {
+    throw new FulfillmentBlockedError('MISSING_SHIPPING_STREET', {
+      note: 'No structured street line on this order — requires manual review; the street must never be inferred from the flattened address'
     });
   }
 
@@ -545,11 +563,13 @@ export const prepareFulfillment = async (orderRow, {
     resolvedItems: resolved,
     logisticName: selection.method,
     shippingCountryCode: destinationCountryCode,
-    shippingCountry: orderRow.shipping_country_name,
+    // English, from the ISO code — never the storefront's localized name.
+    shippingCountry: cjCountryName(destinationCountryCode),
     shippingProvince: orderRow.shipping_region,
     shippingCity: orderRow.shipping_city,
     shippingCustomerName: orderRow.customer_name,
-    shippingAddress: orderRow.shipping_address,
+    shippingAddress: orderRow.shipping_street,
+    shippingAddress2: orderRow.shipping_street2 || '',
     shippingZip: orderRow.shipping_postal_code,
     shippingPhone: orderRow.customer_phone,
     email: orderRow.customer_email,

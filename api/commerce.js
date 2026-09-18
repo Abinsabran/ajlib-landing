@@ -268,6 +268,8 @@ const handleTabbyVerify = async (req, res) => {
         // Same structured-city requirement as the Stripe path — both
         // providers must persist it identically (see api/checkout-session.js).
         city: String(validated.customer.city || ''),
+        street: String(validated.customer.address || '').trim(),
+        street2: String(validated.customer.address_line2 || '').trim(),
         postal_code: String(validated.customer.postal_code || ''),
         address: `${validated.customer.address || ''}${validated.customer.address_line2 ? `, ${validated.customer.address_line2}` : ''}, ${validated.customer.city || ''}, ${validated.customer.region || ''}, ${validated.customer.country_name || validated.countryCode}, ${validated.customer.postal_code || ''}`,
         notes: String(validated.customer.notes || ''),

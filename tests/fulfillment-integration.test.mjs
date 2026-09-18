@@ -60,7 +60,7 @@ const stripeEvent = () => JSON.stringify({
 const savedOrderRow = (overrides = {}) => ({
   id: 'order-uuid-1', order_number: ORDER_ID, status: 'paid',
   items: [{ variant: 'أسود-L', quantity: 5 }],
-  shipping_city: 'دبي', shipping_country_code: 'AE', shipping_country_name: 'الإمارات',
+  shipping_street: '1 Test St', shipping_city: 'دبي', shipping_country_code: 'AE', shipping_country_name: 'الإمارات',
   shipping_region: 'دبي', shipping_address: '1 Test St', customer_name: 'Test Buyer',
   customer_phone: '+971500000001', customer_email: 'buyer@example.com',
   product_amount: 13500, shipping_amount: 0, amount_total: 13500,

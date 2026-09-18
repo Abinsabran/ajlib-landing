@@ -303,7 +303,7 @@ test('prepareFulfillment blocks with INSUFFICIENT_CJ_BALANCE before building any
       await assert.rejects(
         () => prepareFulfillment({
           order_number: 'AJ-BAL-1', items: [{ variant: 'أسود-L', quantity: 5 }],
-          shipping_city: 'دبي', shipping_country_code: 'AE', product_amount: 11900, shipping_amount: 0
+          shipping_street: '1 Test St', shipping_city: 'دبي', shipping_country_code: 'AE', product_amount: 11900, shipping_amount: 0
         }, { maxDeliveryDays: 50 }),
         (err) => err instanceof FulfillmentBlockedError && err.reason === 'INSUFFICIENT_CJ_BALANCE'
       );
@@ -476,7 +476,7 @@ test('the pipeline never recomputes AJLIB product/shipping pricing — it only r
 
 const READY_ORDER_ROW = Object.freeze({
   order_number: 'AJ-DUP-1', items: [{ variant: AJLIB_VARIANT_KEYS[0], quantity: 2 }],
-  shipping_city: 'دبي', shipping_country_code: 'AE', shipping_country_name: 'الإمارات', shipping_region: 'دبي',
+  shipping_street: '1 Test St', shipping_city: 'دبي', shipping_country_code: 'AE', shipping_country_name: 'الإمارات', shipping_region: 'دبي',
   shipping_address: 'x', shipping_postal_code: null, customer_name: 'x', customer_phone: 'x', customer_email: 'x@x.com',
   product_amount: 10000, shipping_amount: 1000
 });
@@ -526,7 +526,8 @@ test('the Tabby verify path normalizes city into the same metadata shape as Stri
 
 test('the single shared persistence path writes shipping_city for BOTH providers', async () => {
   const source = await readFile(new URL('../api/stripe-webhook.js', import.meta.url), 'utf8');
-  assert.ok(/shipping_city:\s*metadata\.city/.test(source), 'saveOrder must persist the structured city');
+  assert.ok(/shipping_city:\s*trimmed\(metadata\.city\)/.test(source), 'saveOrder must persist the structured city');
+  assert.ok(/shipping_street:\s*trimmed\(metadata\.street\)/.test(source), 'saveOrder must persist the structured street line');
   // saveOrder is the one function both providers go through (persistPaidOrder),
   // so neither path can drift from the other.
   assert.ok(source.includes('export const persistPaidOrder'));
@@ -640,7 +641,7 @@ test('prepareFulfillment refuses to run without an explicit delivery promise (an
   await assert.rejects(
     () => prepareFulfillment({
       order_number: 'AJ-NOPROMISE', items: [{ variant: 'أسود-L', quantity: 5 }],
-      shipping_city: 'دبي', shipping_country_code: 'AE', product_amount: 11900, shipping_amount: 0
+      shipping_street: '1 Test St', shipping_city: 'دبي', shipping_country_code: 'AE', product_amount: 11900, shipping_amount: 0
     }),
     (err) => err instanceof FulfillmentBlockedError && err.reason === 'DELIVERY_PROMISE_NOT_CONFIGURED'
   );

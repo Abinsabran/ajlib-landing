@@ -56,6 +56,7 @@ const summary = (order) => ({
   items: order.items,
   shipping_country_code: order.shipping_country_code,
   shipping_city: order.shipping_city,
+  shipping_street: order.shipping_street ?? null,
   product_amount: order.product_amount,
   shipping_amount: order.shipping_amount,
   fulfillment_status: order.fulfillment_status ?? null,

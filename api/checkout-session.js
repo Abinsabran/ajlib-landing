@@ -61,6 +61,10 @@ export default async function handler(req, res) {
       // requires shippingCity as a distinct value and must never have it
       // parsed back out of a free-text address.
       'metadata[city]': String(customer.city || '').slice(0, 100),
+      // Street lines on their own, for the same reason as city: CJ's
+      // shippingAddress must be the street only, never the flattened address.
+      'metadata[street]': String(customer.address || '').trim().slice(0, 200),
+      'metadata[street2]': String(customer.address_line2 || '').trim().slice(0, 200),
       'metadata[postal_code]': String(customer.postal_code || '').slice(0, 40),
       'metadata[address]': `${customer.address || ''}${customer.address_line2 ? `, ${customer.address_line2}` : ''}, ${customer.city || ''}, ${customer.region || ''}, ${customer.country_name || countryCode}, ${customer.postal_code || ''}`.slice(0, 500),
       'metadata[notes]': String(customer.notes || '').slice(0, 500),

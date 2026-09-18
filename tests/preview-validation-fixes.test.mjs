@@ -245,7 +245,7 @@ const reviewWorld = ({ balance = 0 } = {}) => {
 const reviewOrderRow = () => ({
   id: 'order-review-1', order_number: 'AJ-REVIEW-1', status: 'paid',
   items: [{ variant: 'أسود-L', quantity: 10 }],
-  shipping_city: 'دبي', shipping_country_code: 'AE',
+  shipping_street: '1 Test St', shipping_city: 'دبي', shipping_country_code: 'AE',
   product_amount: 26900, shipping_amount: 0, amount_total: 26900,
   stripe_session_id: 'tabby_pay_review_1',
   fulfillment_status: null, fulfillment_external_order_id: null

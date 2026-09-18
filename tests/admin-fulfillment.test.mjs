@@ -79,7 +79,7 @@ const baseOrder = (over = {}) => ({
   items: FIRST_ORDER_ITEMS,
   product_amount: 26900, shipping_amount: 15000, amount_total: 41900, currency: 'aed',
   shipping_country_code: 'US', shipping_country_name: 'United States', shipping_region: 'California',
-  shipping_city: 'Lake Forest', shipping_address: 'Test street 1', shipping_postal_code: '92630',
+  shipping_street: '528 Catalonia', shipping_city: 'Lake Forest', shipping_address: 'Test street 1', shipping_postal_code: '92630',
   customer_name: 'Owner Test', customer_phone: '+10000000000', customer_email: 'owner@example.com',
   stripe_session_id: 'cs_live_test', tracking_number: null, shipping_company: null,
   fulfillment_status: 'REVIEW_REQUIRED', fulfillment_error: 'INSUFFICIENT_CJ_BALANCE',

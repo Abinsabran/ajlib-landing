@@ -26,7 +26,7 @@ const withEnv = async (vars, fn) => {
 const readyOrder = (overrides = {}) => ({
   id: 'order-live-1', order_number: 'AJ-LIVE-1', status: 'paid',
   items: [{ variant: 'أسود-L', quantity: 10 }],
-  shipping_city: 'دبي', shipping_country_code: 'AE', shipping_country_name: 'الإمارات',
+  shipping_street: '1 Test St', shipping_city: 'دبي', shipping_country_code: 'AE', shipping_country_name: 'الإمارات',
   shipping_region: 'دبي', shipping_address: '1 St', customer_name: 'T',
   customer_phone: '+971500000001', customer_email: 'b@e.com',
   product_amount: 26900, shipping_amount: 0, amount_total: 26900,
