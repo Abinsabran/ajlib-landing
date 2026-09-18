@@ -350,7 +350,53 @@ const handleTabbyVerify = async (req, res) => {
 // saveStoreProduct/saveStoreVariantBatch/createProductConnection/
 // queryProductConnections remain available for any future re-sync need.
 
+// ---- TEMPORARY read-only probe for the first controlled US order review ----
+// Preview only (404 elsewhere). Calls only read-only CJ endpoints (balance,
+// product connections, variant list, freight calculation) and returns
+// sanitized figures. REMOVE in the same round it is used.
+const handleCjUsFirstOrderProbe = async (req, res) => {
+  if (process.env.VERCEL_ENV !== 'preview') return res.status(404).json({ error: 'Unknown resource' });
+  const { getAccountBalance, calculateFreight, listProductVariants } = await import('./_lib/cj-client.js');
+  const { getCurrentCjProductCosts, resolveFulfillmentVariants, parseCjBalance } = await import('./_lib/cj-fulfillment.js');
+  const { selectLogisticsMethod, maxAgingDays } = await import('./_lib/logistics-policy.js');
+  const { CJ_VARIANT_MAP, CJ_PRODUCT_FAMILY_PID } = await import('./_lib/cj-variant-map.js');
+  try {
+    const part = String(req.query.part || '');
+    if (part === 'wallet') {
+      const balance = await getAccountBalance();
+      const all = resolveFulfillmentVariants(CJ_VARIANT_MAP.map(v => ({ variant: v.ajlibKey, quantity: 1 }))).resolved;
+      const costs = await getCurrentCjProductCosts(all);
+      const variants = await listProductVariants(CJ_PRODUCT_FAMILY_PID);
+      const weightByVid = new Map((variants || []).map(v => [String(v.vid), { weight: v.variantWeight ?? null, packWeight: v.variantPackWeight ?? null }]));
+      return res.status(200).json({
+        balance: { parsed: parseCjBalance(balance.body), code: balance.body?.code ?? null },
+        variants: costs.map(c => ({ key: c.variant, vid: c.cjVariantId, cjPriceUSD: c.unitCostUSD, ...(weightByVid.get(String(c.cjVariantId)) || {}) }))
+      });
+    }
+    if (part === 'freight') {
+      const quantity = Number(req.query.qty);
+      const key = String(req.query.key || '');
+      const variant = CJ_VARIANT_MAP.find(v => v.ajlibKey === key);
+      if (!variant || ![10, 15].includes(quantity)) return res.status(400).json({ error: 'bad params' });
+      const zone = await quoteShipping('US');
+      const freight = await calculateFreight({ startCountryCode: 'CN', endCountryCode: 'US', products: [{ vid: variant.cjVariantId, quantity }] });
+      const body = freight.body || {};
+      const methods = Array.isArray(body.data) ? body.data.map(m => ({ logisticName: m.logisticName, logisticAging: m.logisticAging, logisticPrice: m.logisticPrice, totalPostageFee: m.totalPostageFee, maxAgingDays: maxAgingDays(m) })) : [];
+      return res.status(200).json({
+        key, quantity, cjCode: body.code ?? null, cjMessage: Number(body.code) === 200 ? undefined : body.message,
+        usPromiseDays: { min: zone.min_days, max: zone.max_days },
+        selection: selectLogisticsMethod(body.data || [], { countryCode: 'US', maxDeliveryDays: zone.max_days }),
+        methods
+      });
+    }
+    return res.status(400).json({ error: 'part must be wallet or freight' });
+  } catch (error) {
+    return res.status(502).json({ error: String(error.message || error).slice(0, 200) });
+  }
+};
+
 const HANDLERS = {
+  'cj-us-first-order-probe': handleCjUsFirstOrderProbe,
   'order-quote': handleOrderQuote,
   catalog: handleCatalog,
   currency: handleCurrency,
