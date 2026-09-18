@@ -336,7 +336,24 @@ const handleTabbyVerify = async (req, res) => {
 // saveStoreProduct/saveStoreVariantBatch/createProductConnection/
 // queryProductConnections remain available for any future re-sync need.
 
+// TEMPORARY (identify Tabby's real payment timestamp field, removed this
+// round). Read-only GET of one sandbox payment. Returns only field NAMES and
+// timestamp-shaped values — never buyer, address or order-item data.
+const handleTabbyTimestampProbe = async (req, res) => {
+  const { tabbyRawGet } = await import('../lib/tabby-client.js');
+  const id = String(req.query.payment_id || '');
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return res.status(400).json({ error: 'payment_id required' });
+  const raw = await tabbyRawGet(`/payments/${id}`);
+  const body = raw.body || {};
+  const looksLikeTime = (k, v) => /(_at|date|time)$/i.test(k) || (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(v));
+  const timestamps = {};
+  for (const [k, v] of Object.entries(body)) if (looksLikeTime(k, v)) timestamps[k] = v;
+  const captures = Array.isArray(body.captures) ? body.captures.map(c => Object.fromEntries(Object.entries(c).filter(([k, v]) => looksLikeTime(k, v)))) : null;
+  return res.status(200).json({ httpStatus: raw.status, topLevelKeys: Object.keys(body), status: body.status ?? null, timestamps, captureTimestamps: captures });
+};
+
 const HANDLERS = {
+  'tabby-timestamp-probe': handleTabbyTimestampProbe,
   'order-quote': handleOrderQuote,
   catalog: handleCatalog,
   currency: handleCurrency,
