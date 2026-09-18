@@ -215,3 +215,11 @@ test('every Arabic payment string in the Tabby UI has an English translation', (
   const missing = strings.filter(s => !catalog.includes(`'${s}':`));
   assert.deepEqual(missing, []);
 });
+
+test('the Tabby script loads before the page runs its payment-return handler', () => {
+  // Found on Preview: appended after the main script, handleTabbyReturn did
+  // not exist yet when handlePaymentReturn() ran at load.
+  const tabbyAt = html.indexOf('<script id="tabby-checkout">');
+  const initAt = html.indexOf('handlePaymentReturn().then');
+  assert.ok(tabbyAt > 0 && initAt > tabbyAt, 'tabby-checkout must come before the load-time handlePaymentReturn() call');
+});
