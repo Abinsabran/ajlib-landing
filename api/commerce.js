@@ -336,28 +336,7 @@ const handleTabbyVerify = async (req, res) => {
 // saveStoreProduct/saveStoreVariantBatch/createProductConnection/
 // queryProductConnections remain available for any future re-sync need.
 
-// TEMPORARY (E2E fulfillment validation, removed this round). Read-only:
-// reports CJ's own view of the wallet and recent orders, so "no CJ order
-// was created" and "no wallet deduction" can be proven from CJ's side rather
-// than inferred from our code. No write of any kind.
-const handleCjStateProbe = async (req, res) => {
-  const { getAccountBalance, listOrders } = await import('../lib/cj-client.js');
-  const { parseCjBalance } = await import('../lib/cj-fulfillment.js');
-  const balance = await getAccountBalance();
-  const orders = await listOrders({ pageNum: 1, pageSize: 50 });
-  const rows = orders.body?.data?.list ?? orders.body?.data ?? [];
-  const list = Array.isArray(rows) ? rows : [];
-  return res.status(200).json({
-    at: new Date().toISOString(),
-    balance: parseCjBalance(balance.body),
-    ordersApi: { code: orders.body?.code ?? null, message: orders.body?.message ?? null },
-    totalOrdersVisible: list.length,
-    ajlibOrders: list.filter(o => String(o.orderNum || '').startsWith('AJLIB-')).map(o => ({ orderNum: o.orderNum, orderStatus: o.orderStatus, paymentDate: o.paymentDate ?? null }))
-  });
-};
-
 const HANDLERS = {
-  'cj-state-probe': handleCjStateProbe,
   'order-quote': handleOrderQuote,
   catalog: handleCatalog,
   currency: handleCurrency,
