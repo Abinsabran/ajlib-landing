@@ -293,3 +293,21 @@ test('every new label has English, and the preparing stage reads "Preparing orde
   // the new controls inherit RTL/LTR — none hard-codes a direction.
   assert.doesNotMatch(html.slice(html.indexOf('id="adminBackToAccount"') - 80, html.indexOf('id="adminBackToAccount"') + 120), /dir=/);
 });
+
+test('an empty cart never requests a shipping quote (the fee needs a quantity)', async () => {
+  const box = element();
+  const calls = [];
+  const form = { elements: { country_code: { value: 'US' }, country_name: { value: '' } } };
+  const context = {
+    document: { getElementById: (id) => ({ checkout: form, shippingQuote: box })[id] || null },
+    fetch: async (...args) => { calls.push(args); throw new Error('no network'); },
+    countryName: (c) => c, cart: null, shippingQuote: 'stale', JSON
+  };
+  vm.createContext(context);
+  vm.runInContext(fnSource('updateShippingQuote'), context);
+  assert.equal(await context.updateShippingQuote(), null);
+  context.cart = { items: [] };
+  assert.equal(await context.updateShippingQuote(), null);
+  assert.equal(calls.length, 0);
+  assert.equal(context.shippingQuote, null);
+});
