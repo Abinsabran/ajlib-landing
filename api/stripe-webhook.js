@@ -34,14 +34,20 @@ const formatItems = (value = '') => String(value).split(',').filter(Boolean).map
   return `<li><b>${escapeHtml(count)} قطعة</b> — ${escapeHtml(variant.replace('-', ' / '))}</li>`;
 }).join('');
 
-// The amount AJLIB actually priced and charged, in AED. Checkout Sessions are
-// created in AED with Adaptive Pricing off, so this is normally just
-// amount_total/currency. It stays correct even if a session ever reports a
-// converted presentment currency: Stripe's current API keeps the integration
-// currency on the session (with presentment_details alongside), and older API
-// versions put the presentment currency on the session with the AED source
-// amount under currency_conversion.
+// The order's CANONICAL total, in AED fils. AJLIB prices in AED and puts
+// the server-computed product and shipping amounts in the payment metadata,
+// so that is the source whenever present. Otherwise (payments made before
+// that metadata existed) it falls back to the charged amount, which was
+// always AED — including the older Adaptive Pricing shape where the session
+// carried the presentment currency and the AED amount sat under
+// currency_conversion.
 export const settledOrderAmount = (session) => {
+  const metadata = session.metadata || {};
+  const product = Number(metadata.product_amount);
+  const shipping = Number(metadata.shipping_amount);
+  if (metadata.product_amount !== undefined && Number.isInteger(product) && Number.isInteger(shipping)) {
+    return { amount_total: product + shipping, currency: 'aed' };
+  }
   const conversion = session.currency_conversion;
   if (conversion && String(conversion.source_currency || '').toLowerCase() === 'aed' && Number.isFinite(Number(conversion.amount_total))) {
     return { amount_total: Number(conversion.amount_total), currency: 'aed' };
@@ -49,12 +55,39 @@ export const settledOrderAmount = (session) => {
   return { amount_total: session.amount_total || 0, currency: String(session.currency || 'aed').toLowerCase() };
 };
 
+// What the customer was ACTUALLY charged: the currency and amount of the
+// payment itself (AED for AED checkouts, USD cents for USD checkouts).
+// Stripe's presentment_details, when present, is the charged presentment.
+export const paidAmount = (session) => {
+  const presentment = session.presentment_details;
+  if (presentment?.presentment_currency && Number.isFinite(Number(presentment.presentment_amount))) {
+    return { paid_currency: String(presentment.presentment_currency).toLowerCase(), paid_amount: Number(presentment.presentment_amount) };
+  }
+  return { paid_currency: String(session.currency || 'aed').toLowerCase(), paid_amount: Number(session.amount_total || 0) };
+};
+
+// Every amount column written for a paid order. amount_total/currency keep
+// their long-standing meaning — the canonical AED total — so revenue totals,
+// historical orders and the CJ profit guard all stay in AED.
+export const orderAmountFields = (session) => {
+  const canonical = settledOrderAmount(session);
+  return {
+    amount_total: canonical.amount_total,
+    currency: canonical.currency,
+    canonical_total_aed: canonical.currency === 'aed' ? canonical.amount_total : null,
+    ...paidAmount(session)
+  };
+};
+
+const money = (amount, currency) => new Intl.NumberFormat('ar-AE', { style: 'currency', currency: String(currency || 'aed').toUpperCase() }).format(Number(amount || 0) / 100);
+
 const sendOrderEmail = async (session) => {
   const metadata = session.metadata || {};
   const orderId = metadata.order_id || session.client_reference_id || session.id;
   const customerEmail = session.customer_details?.email || session.customer_email || '';
-  const settled = settledOrderAmount(session);
-  const amount = new Intl.NumberFormat('ar-AE', { style: 'currency', currency: settled.currency.toUpperCase() }).format(settled.amount_total / 100);
+  const fields = orderAmountFields(session);
+  const amount = money(fields.amount_total, fields.currency)
+    + (fields.paid_currency !== fields.currency ? ` — المدفوع: ${money(fields.paid_amount, fields.paid_currency)}` : '');
   const shippingAmount = new Intl.NumberFormat('ar-AE', { style: 'currency', currency: 'AED' }).format(Number(metadata.shipping_amount || 0) / 100);
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -80,7 +113,7 @@ const sendOrderEmail = async (session) => {
         <p><b>العنوان:</b> ${escapeHtml(metadata.address)}</p>
         <p><b>الدولة:</b> ${escapeHtml(metadata.country_name || metadata.country_code)}</p>
         <p><b>الشحن:</b> ${escapeHtml(shippingAmount)} — ${escapeHtml(metadata.shipping_zone || '')}</p>
-        <p style="color:#686b62">الرسوم الجمركية أو ضرائب الاستيراد المحلية — إن وُجدت — يتحملها المستلم.</p>
+        <p style="color:#686b62">قد تختلف الرسوم الجمركية والضرائب حسب خط الشحن وبلد الاستلام.</p>
         <p><b>ملاحظات:</b> ${escapeHtml(metadata.notes || 'لا توجد')}</p>
         <hr><h2>الألوان والمقاسات</h2><ul>${formatItems(metadata.items)}</ul>
         <p style="color:#686b62">تم إرسال هذه الرسالة بعد تأكيد الدفع من Stripe.</p>
@@ -138,7 +171,7 @@ const saveOrder = async (session) => {
       items,
       product_amount: Number(metadata.product_amount || 0),
       shipping_amount: Number(metadata.shipping_amount || 0),
-      ...settledOrderAmount(session),
+      ...orderAmountFields(session),
       status: 'paid',
       stripe_session_id: session.id,
       stripe_payment_intent_id: session.payment_intent || null,

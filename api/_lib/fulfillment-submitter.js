@@ -135,10 +135,13 @@ export const submitReadyOrder = async (orderRow, { maxDeliveryDays, timeoutMs, p
     return { submitted: false, outcome: SUBMIT_OUTCOME.BLOCKED_ON_RECHECK, reason: 'PAYMENT_MODE_MISMATCH' };
   }
 
-  // 4. Automatic creation needs a GREEN margin, whatever else is configured.
-  if (prepared.margin?.band !== MARGIN_BANDS.GREEN) {
-    await recordReview(orderRow, 'MARGIN_NOT_GREEN');
-    return { submitted: false, outcome: SUBMIT_OUTCOME.BLOCKED_ON_RECHECK, reason: 'MARGIN_NOT_GREEN' };
+  // 4. Automatic creation needs the profit guard passed on the economics
+  //    re-checked just now (>= 25% true net margin AND >= 30 AED net
+  //    profit), whatever else is configured.
+  if (!prepared.margin?.approved || prepared.margin?.band !== MARGIN_BANDS.GREEN) {
+    const reason = prepared.margin?.approved === false && prepared.margin.reason ? prepared.margin.reason : 'MARGIN_NOT_GREEN';
+    await recordReview(orderRow, reason);
+    return { submitted: false, outcome: SUBMIT_OUTCOME.BLOCKED_ON_RECHECK, reason };
   }
 
   // 5. Idempotency on CJ's side: never create a second order under the same

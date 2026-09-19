@@ -189,7 +189,8 @@ test('returning without a stored order (e.g. the app flow) shows guidance and ca
 
 test('the card (Stripe) path is unchanged: only a Tabby selection is diverted', () => {
   assert.match(html, /if\(selectedPayMethod\(\)==='tabby'\)return startTabbyCheckout\(button,data,id\);button\.disabled=true;button\.textContent='جارٍ حفظ البيانات وتجهيز صفحة Stripe…';/);
-  assert.match(html, /fetch\('\/api\/checkout-session',\{method:'POST',headers,body:JSON\.stringify\(\{id,amount:cart\.pack\.p,customer:data,cart\}\)\}\)/);
+  // Card path: only the chosen payment currency is sent; every amount is the server's.
+  assert.match(html, /fetch\('\/api\/checkout-session',\{method:'POST',headers,body:JSON\.stringify\(\{id,customer:data,cart,payment_currency:data\.payment_currency==='usd'\?'usd':'aed'\}\)\}\)/);
 });
 
 test('Tabby checkout and verify have clean routes to the commerce function', () => {

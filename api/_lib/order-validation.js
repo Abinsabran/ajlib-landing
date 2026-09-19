@@ -60,7 +60,7 @@ export const buildValidatedOrder = async (order, { accessToken } = {}) => {
   // fault: reject it as a 400 (quoteShipping enforces the approved markets).
   let shipping;
   try {
-    shipping = await quoteShipping(countryCode);
+    shipping = await quoteShipping(countryCode, quantity);
   } catch (error) {
     throw new OrderValidationError(400, error.message || 'الشحن إلى هذه الدولة غير متاح حاليًا');
   }

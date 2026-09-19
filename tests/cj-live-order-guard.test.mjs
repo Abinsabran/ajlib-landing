@@ -256,7 +256,7 @@ test('a margin below GREEN is never created automatically', async () => {
     try {
       const result = await submitReadyOrder(readyOrder({ product_amount: 12000 }), { maxDeliveryDays: 14, paymentMode: 'manual' });
       assert.equal(result.outcome, SUBMIT_OUTCOME.BLOCKED_ON_RECHECK);
-      assert.ok(['MARGIN_BELOW_FLOOR', 'FULFILLMENT_REVIEW_REQUIRED', 'MARGIN_NOT_GREEN'].includes(result.reason), result.reason);
+      assert.equal(result.reason, 'MARGIN_BELOW_25_PERCENT');
       assert.equal(createRequests(calls).length, 0);
     } finally { restore(); }
   });
@@ -403,4 +403,21 @@ test('the request timeout surfaces as its own error type for reconciliation', ()
   const e = new CjOrderRequestTimeoutError(8000);
   assert.equal(e.code, 'CJ_ORDER_REQUEST_TIMEOUT');
   assert.match(e.message, /reconcile before any retry/);
+});
+
+test('the profit guard is re-checked at creation: NET_PROFIT_BELOW_30_AED holds the order for review, nothing is created', async () => {
+  await withEnv(AUTO, async () => {
+    const { calls, restore } = world({ create: createdUnpaid() });
+    try {
+      // A preparation whose margin clears 25% but whose net profit is under 30 AED.
+      const prepared = { payload: { orderNumber: 'AJLIB-AJ-LIVE-1', payType: 1 }, margin: { approved: false, band: 'GREEN', reason: 'NET_PROFIT_BELOW_30_AED' } };
+      const result = await submitReadyOrder(readyOrder(), { maxDeliveryDays: 14, paymentMode: 'manual', prepared });
+      assert.equal(result.outcome, SUBMIT_OUTCOME.BLOCKED_ON_RECHECK);
+      assert.equal(result.reason, 'NET_PROFIT_BELOW_30_AED');
+      assert.equal(createRequests(calls).length, 0);
+      const saved = patches(calls).at(-1);
+      assert.equal(saved.fulfillment_status, 'REVIEW_REQUIRED');
+      assert.equal(saved.fulfillment_error, 'NET_PROFIT_BELOW_30_AED');
+    } finally { restore(); }
+  });
 });

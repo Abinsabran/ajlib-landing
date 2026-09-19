@@ -79,7 +79,7 @@ test('English exists for every string the launch builder added', async () => {
     assert.ok(catalog.includes(`'${key}':`), `missing English for ${key}`);
   }
   // Dynamic summary lines are covered by patterns.
-  for (const pattern of ['من (.+) إلى (.+) قطعة', 'الشحن: (.+)', 'مدة التوصيل: (.+)–(.+) أيام عمل', 'تقريبي — الدفع بالدرهم']) assert.ok(catalog.includes(pattern), pattern);
+  for (const pattern of ['من (.+) إلى (.+) قطعة', 'الشحن: (.+)', 'مدة التوصيل: (.+)–(.+) أيام عمل', '≈ (.+) \\(تقريبي\\)']) assert.ok(catalog.includes(pattern), pattern);
   // The <optgroup> headings of the delivery-country dropdown are translated.
   assert.match(await read('assets/store-language.js'), /const attributes = \[[^\]]*'label'\]/);
 });

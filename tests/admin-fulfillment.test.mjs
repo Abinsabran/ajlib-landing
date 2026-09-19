@@ -357,8 +357,9 @@ test('the approved first US order resolves to exactly 10 units through the confi
 });
 
 test('if the preferred route would miss the 25% band, the cheaper appropriate route is used instead', async () => {
-  // At 250 AED collected: YunExpress lands just under 25%, LuWei just over.
-  const w = world({ orders: [baseOrder({ product_amount: 25000, shipping_amount: 0 })], balanceUSD: 85 });
+  // At 256 AED collected (US: international card fee included): YunExpress
+  // lands at 24.3% (under 25%), LuWei at 26.7% with 68 AED net profit.
+  const w = world({ orders: [baseOrder({ product_amount: 25600, shipping_amount: 0 })], balanceUSD: 85 });
   const res = await run(w, { body: { action: 'reprepare', order_id: ORDER_ID } });
   assert.equal(res.body.outcome, 'READY_FOR_CJ');
   assert.equal(res.body.route.method, 'LuWei Ordinary US');

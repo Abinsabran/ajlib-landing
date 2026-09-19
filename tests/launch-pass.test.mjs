@@ -91,7 +91,9 @@ test('the builder country carries into checkout without overriding a chosen one'
 test('the local-currency figure is a labelled, display-only estimate', () => {
   assert.match(html, /\/api\/currency\?country_code=/);
   assert.match(html, /if\(!c\.display_is_estimate/);
-  assert.match(html, /تقريبي — الدفع بالدرهم/);
+  // Payment may now be AED or USD, so the estimate no longer says "paid in AED".
+  assert.ok(html.includes("' (تقريبي)'"));
+  assert.ok(!html.includes('الدفع بالدرهم'));
 });
 
 // ---- layout ------------------------------------------------------------------------

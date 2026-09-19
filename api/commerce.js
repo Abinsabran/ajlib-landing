@@ -8,6 +8,7 @@ import { persistPaidOrder } from './stripe-webhook.js';
 import { handleAdminFulfillment } from './_lib/admin-fulfillment.js';
 import { syncOpenOrders } from './_lib/fulfillment-tracking.js';
 import { SHIPPING_COUNTRIES } from './_lib/markets.js';
+import { paymentOptions } from './_lib/payment-currency.js';
 
 // Grouped, provider-neutral handler for the foundation endpoints added
 // alongside the existing per-feature functions (checkout-session.js,
@@ -94,7 +95,7 @@ const handleOrderQuote = async (req, res) => {
 
     let shipping;
     try {
-      shipping = await quoteShipping(countryCode);
+      shipping = await quoteShipping(countryCode, quantity);
     } catch (error) {
       return quoteFail(res, language, 'UNSUPPORTED_SHIPPING_COUNTRY', error.message);
     }
@@ -117,7 +118,10 @@ const handleOrderQuote = async (req, res) => {
       zoneCode: shipping.zone_code,
       zoneName: shipping.zone_name,
       dutiesIncluded: shipping.duties_included,
-      supportedCountries
+      supportedCountries,
+      // What the customer would be charged in each payment currency; USD is
+      // converted from the AED total here, never on the client.
+      paymentOptions: paymentOptions(productAmount + shipping.amount)
     });
   } catch (error) {
     return res.status(500).json({ error: error.message || 'تعذر حساب السعر' });

@@ -63,7 +63,7 @@ test('all 7 approved markets are accepted by quoteShipping, order-quote and ship
     assert.equal(res.statusCode, 200, `order-quote ${code}`);
     assert.deepEqual(res.body.supportedCountries, APPROVED);
 
-    const shipping = await shippingQuoteHandler({ method: 'GET', query: { country_code: code } }, makeRes());
+    const shipping = await shippingQuoteHandler({ method: 'GET', query: { country_code: code, quantity: '10' } }, makeRes());
     assert.equal(shipping.statusCode, 200, `shipping-quote ${code}`);
   }
 }));
@@ -73,7 +73,7 @@ test('Oman is rejected by every quote endpoint', () => noDb(async () => {
   const res = await orderQuote('OM');
   assert.equal(res.statusCode, 400);
   assert.equal(res.body.code, 'UNSUPPORTED_SHIPPING_COUNTRY');
-  const shipping = await shippingQuoteHandler({ method: 'POST', body: { country_code: 'om' } }, makeRes());
+  const shipping = await shippingQuoteHandler({ method: 'POST', body: { country_code: 'om', quantity: 10 } }, makeRes());
   assert.equal(shipping.statusCode, 400);
 }));
 

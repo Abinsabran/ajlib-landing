@@ -198,7 +198,7 @@ test('margin guard blocks fulfillment when the real margin is below a configured
     minAcceptableMarginPercent: 15
   });
   assert.equal(result.approved, false);
-  assert.equal(result.reason, 'MARGIN_BELOW_THRESHOLD');
+  assert.equal(result.reason, 'MARGIN_BELOW_25_PERCENT');
   assert.ok(result.details.marginPercent < 15);
 });
 
@@ -222,7 +222,7 @@ test('the approved default margin threshold is 20% and is applied when no explic
     cjProductCostUSD: 11.05, cjShippingCostUSD: 17.96
   });
   assert.equal(withPostal.approved, false, 'a 10.5% margin must be blocked by the 20% threshold');
-  assert.equal(withPostal.reason, 'MARGIN_BELOW_THRESHOLD');
+  assert.equal(withPostal.reason, 'MARGIN_BELOW_25_PERCENT');
 
   // Same order with the cheapest-available pick (CJPacket Eub): ~33%.
   const withEub = evaluateFulfillmentMargin({
@@ -689,24 +689,25 @@ test('classifyMargin maps each band correctly, including the exact boundaries', 
   assert.equal(classifyMargin(NaN), 'BLOCK');
 });
 
-test('a REVIEW-band order is NOT auto-fulfilled by default, but is distinguished from a BLOCK', () => {
+test('a REVIEW-band order is never auto-fulfilled, and no escape hatch can approve it', () => {
   // ~22% true net margin.
   const review = evaluateFulfillmentMargin({
     productAmountCollectedFils: 11900, shippingAmountCollectedFils: 0,
     cjProductCostUSD: 11.05, cjShippingCostUSD: 13.25, unitCount: 5
   });
   assert.equal(review.band, 'REVIEW');
-  assert.equal(review.approved, false, 'REVIEW must not auto-fulfill by default');
-  assert.equal(review.reason, 'MARGIN_REVIEW_REQUIRED');
+  assert.equal(review.approved, false, 'REVIEW must not auto-fulfill');
+  assert.equal(review.reason, 'MARGIN_BELOW_25_PERCENT');
 
-  // The same order with the escape hatch explicitly enabled.
+  // The former CJ_ALLOW_REVIEW_BAND_AUTOFULFILL escape hatch is gone: the
+  // profit guard (>= 25% AND >= 30 AED) is the only way to approve.
   const allowed = evaluateFulfillmentMargin({
     productAmountCollectedFils: 11900, shippingAmountCollectedFils: 0,
     cjProductCostUSD: 11.05, cjShippingCostUSD: 13.25, unitCount: 5,
     allowReviewBandAutofulfill: true
   });
   assert.equal(allowed.band, 'REVIEW');
-  assert.equal(allowed.approved, true);
+  assert.equal(allowed.approved, false);
 });
 
 // ---- TRUE VARIABLE COST (payment fee included) ------------------------------

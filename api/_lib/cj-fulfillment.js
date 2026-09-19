@@ -14,8 +14,8 @@ import { cjVariantFor, AJLIB_VARIANT_KEYS } from './cj-variant-map.js';
 import { calculateFreight, queryProductConnections, getAccountBalance, findOrderByOrderNumber, isCjErrorBody, CJ_RATE_LIMITED_CODE } from './cj-client.js';
 import {
   selectLogisticsMethod, MIN_ACCEPTABLE_MARGIN_PERCENT, CJ_BALANCE_LOW_WARNING_AED,
-  classifyMargin, MARGIN_BANDS, CJ_MARGIN_AUTO_PERCENT, CJ_ALLOW_REVIEW_BAND_AUTOFULFILL,
-  STRIPE_FEE_PERCENT, STRIPE_FEE_FIXED_AED, STRIPE_INTERNATIONAL_SURCHARGE_PERCENT, TABBY_FEE_PERCENT, TABBY_FEE_FIXED_AED,
+  classifyMargin, MARGIN_BANDS, CJ_MARGIN_AUTO_PERCENT, PROFIT_GUARD_MIN_MARGIN_PERCENT, PROFIT_GUARD_MIN_NET_PROFIT_AED,
+  STRIPE_FEE_PERCENT, STRIPE_FEE_FIXED_AED, STRIPE_INTERNATIONAL_SURCHARGE_PERCENT, STRIPE_CURRENCY_CONVERSION_PERCENT, TABBY_FEE_PERCENT, TABBY_FEE_FIXED_AED,
   CJ_CUSTOMIZATION_COST_USD_PER_UNIT, OTHER_VARIABLE_COST_USD_PER_ORDER
 } from './logistics-policy.js';
 import { AJLIB_DEFAULT_SHOP_ID, AJLIB_PLATFORM_PRODUCT_ID } from './cj-store-connection.js';
@@ -223,14 +223,16 @@ export const checkCjBalance = async (requiredUSD) => {
 // provider: 'stripe' | 'tabby'. A null fee (Tabby's unpublished negotiated
 // rate, when not configured) yields null — "cannot evaluate", which blocks
 // margin approval rather than silently understating cost.
-export const paymentFeeUSD = ({ amountCollectedFils, provider = 'stripe', international = false }) => {
+export const paymentFeeUSD = ({ amountCollectedFils, provider = 'stripe', international = false, currencyConversion = false }) => {
   const amountAed = Number(amountCollectedFils || 0) / 100;
   if (provider === 'tabby') {
     if (TABBY_FEE_PERCENT == null) return null;
     // Confirmed UAE rate: 6.99% + AED 1.50 per transaction.
     return aedToUsd(amountAed * (TABBY_FEE_PERCENT / 100) + TABBY_FEE_FIXED_AED);
   }
-  const percent = STRIPE_FEE_PERCENT + (international ? STRIPE_INTERNATIONAL_SURCHARGE_PERCENT : 0);
+  const percent = STRIPE_FEE_PERCENT
+    + (international ? STRIPE_INTERNATIONAL_SURCHARGE_PERCENT : 0)
+    + (currencyConversion ? STRIPE_CURRENCY_CONVERSION_PERCENT : 0);
   return aedToUsd(amountAed * (percent / 100) + STRIPE_FEE_FIXED_AED);
 };
 
@@ -240,12 +242,12 @@ export const paymentFeeUSD = ({ amountCollectedFils, provider = 'stripe', intern
 // per-order variable cost.
 export const computeTrueVariableCost = ({
   cjProductCostUSD, cjShippingCostUSD, unitCount = 0,
-  amountCollectedFils, provider = 'stripe', international = false,
+  amountCollectedFils, provider = 'stripe', international = false, currencyConversion = false,
   customizationCostPerUnitUSD = CJ_CUSTOMIZATION_COST_USD_PER_UNIT,
   otherVariableCostUSD = OTHER_VARIABLE_COST_USD_PER_ORDER
 }) => {
   const customizationUSD = Number(customizationCostPerUnitUSD || 0) * Number(unitCount || 0);
-  const feeUSD = paymentFeeUSD({ amountCollectedFils, provider, international });
+  const feeUSD = paymentFeeUSD({ amountCollectedFils, provider, international, currencyConversion });
   if (feeUSD == null) {
     return { total: null, reason: 'PAYMENT_FEE_NOT_CONFIGURED', breakdown: { provider } };
   }
@@ -269,9 +271,16 @@ export const computeTrueVariableCost = ({
 // customization + payment fee + other known per-order variable cost), never
 // on CJ product+freight alone, and never using platformPrice.
 //
-//   >= 25% -> GREEN  : approved for automatic fulfillment
-//   20-25% -> REVIEW : held for a human (unless explicitly enabled)
+//   >= 25% -> GREEN  : margin half of the profit guard met
+//   20-25% -> REVIEW : held for a human
 //   <  20% -> BLOCK  : never auto-fulfilled
+//
+// PROFIT GUARD (logistics-policy.js): approved ONLY when the true net
+// margin is >= 25% AND the true net profit is >= 30 AED. The reason names
+// the first rule that failed: MARGIN_BELOW_25_PERCENT, then
+// NET_PROFIT_BELOW_30_AED. Amounts are canonical AED (the order's product +
+// shipping), whatever currency the customer paid in; a USD payment adds
+// Stripe's currency-conversion fee to the cost.
 //
 // An unconfigured threshold or an unknown payment fee is treated as
 // "cannot be safely evaluated" and blocks — never as "no limit".
@@ -280,9 +289,8 @@ export const evaluateFulfillmentMargin = ({
   cjProductCostUSD, cjShippingCostUSD, // from getCurrentCjProductCosts / resolveFreightAndLogistics
   aedToUsdRate = AED_TO_USD,
   minAcceptableMarginPercent = MIN_ACCEPTABLE_MARGIN_PERCENT,
-  unitCount = 0, provider = 'stripe', international = false,
-  customizationCostPerUnitUSD, otherVariableCostUSD,
-  allowReviewBandAutofulfill = CJ_ALLOW_REVIEW_BAND_AUTOFULFILL
+  unitCount = 0, provider = 'stripe', international = false, currencyConversion = false,
+  customizationCostPerUnitUSD, otherVariableCostUSD
 }) => {
   if (minAcceptableMarginPercent == null || !Number.isFinite(Number(minAcceptableMarginPercent))) {
     return { approved: false, reason: 'MARGIN_THRESHOLD_NOT_CONFIGURED', band: MARGIN_BANDS.BLOCK, details: {} };
@@ -291,7 +299,7 @@ export const evaluateFulfillmentMargin = ({
   const amountCollectedFils = Number(productAmountCollectedFils || 0) + Number(shippingAmountCollectedFils || 0);
   const variable = computeTrueVariableCost({
     cjProductCostUSD, cjShippingCostUSD, unitCount, amountCollectedFils,
-    provider, international, customizationCostPerUnitUSD, otherVariableCostUSD
+    provider, international, currencyConversion, customizationCostPerUnitUSD, otherVariableCostUSD
   });
   if (variable.total == null) {
     // e.g. a Tabby order with no negotiated rate configured: the true cost
@@ -303,18 +311,23 @@ export const evaluateFulfillmentMargin = ({
   const marginUSD = collectedUSD - variable.total;
   const marginPercent = collectedUSD > 0 ? (marginUSD / collectedUSD) * 100 : -100;
   const band = classifyMargin(marginPercent);
-  const approved = band === MARGIN_BANDS.GREEN || (band === MARGIN_BANDS.REVIEW && allowReviewBandAutofulfill);
-
-  const reason = band === MARGIN_BANDS.GREEN ? 'MARGIN_OK'
-    : band === MARGIN_BANDS.REVIEW ? 'MARGIN_REVIEW_REQUIRED'
-    : 'MARGIN_BELOW_THRESHOLD';
+  const netProfitAed = marginUSD / aedToUsdRate;
+  const marginOk = marginPercent >= PROFIT_GUARD_MIN_MARGIN_PERCENT;
+  const profitOk = netProfitAed >= PROFIT_GUARD_MIN_NET_PROFIT_AED;
+  const approved = marginOk && profitOk;
+  const reason = !marginOk ? 'MARGIN_BELOW_25_PERCENT'
+    : !profitOk ? 'NET_PROFIT_BELOW_30_AED'
+    : 'MARGIN_OK';
 
   return {
     approved, band, reason,
     details: {
       collectedUSD,
+      collectedAed: amountCollectedFils / 100,
       fulfillmentCostUSD: variable.total, // true variable cost
-      marginUSD, marginPercent,
+      marginUSD, marginPercent, netProfitAed,
+      minMarginPercent: PROFIT_GUARD_MIN_MARGIN_PERCENT,
+      minNetProfitAed: PROFIT_GUARD_MIN_NET_PROFIT_AED,
       minAcceptableMarginPercent,
       autoThresholdPercent: CJ_MARGIN_AUTO_PERCENT,
       breakdown: variable.breakdown
@@ -565,6 +578,10 @@ export const prepareFulfillment = async (orderRow, {
       unitCount,
       // Which provider actually collected the money determines the real fee.
       provider: String(orderRow.stripe_session_id || '').startsWith('tabby_') ? 'tabby' : 'stripe',
+      // Stripe's surcharges, read conservatively: a non-UAE destination is
+      // treated as a non-UAE card, and a USD payment needs conversion.
+      international: String(destinationCountryCode || '').toUpperCase() !== 'AE',
+      currencyConversion: String(orderRow.paid_currency || 'aed').toLowerCase() !== 'aed',
       customizationCostPerUnitUSD: customizationPerUnitUSD
     })
   });
@@ -585,12 +602,10 @@ export const prepareFulfillment = async (orderRow, {
   const reviewContext = { logistics: selection, requiredUSD, unitCount };
 
   if (!margin.approved) {
-    // REVIEW and BLOCK are distinguished so an operator can tell a
-    // thin-but-viable order from a genuinely loss-making one.
-    throw new FulfillmentBlockedError(
-      margin.band === MARGIN_BANDS.REVIEW ? 'FULFILLMENT_REVIEW_REQUIRED' : 'MARGIN_BELOW_FLOOR',
-      { margin, ...reviewContext }
-    );
+    // The profit guard's own reason (MARGIN_BELOW_25_PERCENT or
+    // NET_PROFIT_BELOW_30_AED, or PAYMENT_FEE_NOT_CONFIGURED) is what the
+    // order is held for, with the full economics attached for the owner.
+    throw new FulfillmentBlockedError(margin.reason, { margin, ...reviewContext });
   }
 
   // Balance preflight LAST among the guards, so the wallet is only queried

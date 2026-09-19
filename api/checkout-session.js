@@ -1,4 +1,5 @@
 import { buildValidatedOrder, OrderValidationError } from './_lib/order-validation.js';
+import { parsePaymentCurrency, paymentAmounts, PaymentCurrencyError } from './_lib/payment-currency.js';
 
 const stripeRequest = async (path, options = {}) => {
   const response = await fetch(`https://api.stripe.com/v1/${path}`, {
@@ -37,6 +38,16 @@ export default async function handler(req, res) {
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
     const order = req.body || {};
 
+    // The customer's explicit choice (AED default). Only the currency comes
+    // from the client; every amount is computed below on the server.
+    let paymentCurrency;
+    try {
+      paymentCurrency = parsePaymentCurrency(order.payment_currency);
+    } catch (error) {
+      if (error instanceof PaymentCurrencyError) return res.status(400).json({ error: error.message });
+      throw error;
+    }
+
     let validated;
     try {
       const accessToken = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
@@ -46,6 +57,8 @@ export default async function handler(req, res) {
       throw error; // falls through to the outer catch below, same as before extraction
     }
     const { quantity, itemSummary, productAmount, shipping, customer, customerEmail, countryCode, userId, preorders } = validated;
+    // What Stripe charges, in exactly one currency for every line and wallet.
+    const charge = paymentAmounts({ productAmountFils: productAmount, shippingAmountFils: shipping.amount, currency: paymentCurrency });
     const origin = `https://${req.headers['x-forwarded-host'] || req.headers.host}`;
     const metadataFields = {
       'metadata[order_id]': String(order.id),
@@ -71,6 +84,11 @@ export default async function handler(req, res) {
       'metadata[product_amount]': String(productAmount),
       'metadata[shipping_amount]': String(shipping.amount),
       'metadata[shipping_zone]': shipping.zone_code,
+      // Canonical AED total vs. what this payment charges, for the webhook.
+      'metadata[canonical_total_aed]': String(charge.canonicalTotalAed),
+      'metadata[payment_currency]': charge.currency,
+      'metadata[payment_amount]': String(charge.total),
+      'metadata[fx_rate_aed_usd]': String(charge.fxRate),
       'metadata[user_id]': userId,
       'metadata[preorder]': (preorders||[]).map(x=>`${x.variant}:${x.preorder_eta||'سيحدد لاحقًا'}`).join(',').slice(0,500)
     };
@@ -81,8 +99,8 @@ export default async function handler(req, res) {
     if (order.mobile === true) {
       if (!process.env.STRIPE_PUBLISHABLE_KEY) return res.status(503).json({ error: 'الدفع عبر التطبيق غير مفعّل بعد' });
       const intentParams = new URLSearchParams({
-        amount: String(productAmount + shipping.amount),
-        currency: 'aed',
+        amount: String(charge.total),
+        currency: charge.currency,
         receipt_email: customerEmail,
         description: `AJLIB order ${String(order.id)}`,
         'automatic_payment_methods[enabled]': 'true',
@@ -101,18 +119,15 @@ export default async function handler(req, res) {
       'payment_intent_data[description]': `AJLIB order ${String(order.id)}`,
       'invoice_creation[enabled]': 'true',
       'phone_number_collection[enabled]': 'true',
-      // AED only. With Adaptive Pricing on (the Dashboard default), Stripe's
-      // hosted page offered a converted local currency (e.g. USD 118.61 for
-      // an AED 419 order) and, after the customer switched back to AED, Apple
-      // Pay was shown "$419.00": the AED amount under the USD currency code.
-      // That is a Stripe-side wallet/presentment mismatch we cannot fix on
-      // their page, so the currency choice is removed for this session. The
-      // customer sees and is charged exactly the server-priced AED total in
-      // card, Apple Pay, Google Pay and Link alike; a non-AED card is
-      // converted by the card issuer. Prices are unchanged.
+      // Adaptive Pricing stays OFF. With it on (the Dashboard default),
+      // Stripe's page offered its own currency toggle and, after a switch
+      // back to AED, Apple Pay was shown "$419.00": the AED amount under the
+      // USD code. The currency is now chosen on AJLIB's checkout and fixed
+      // here — every line item, the total, the PaymentIntent and every
+      // wallet use charge.currency and the server-computed charge amounts.
       'adaptive_pricing[enabled]': 'false',
-      'line_items[0][price_data][currency]': 'aed',
-      'line_items[0][price_data][unit_amount]': String(productAmount),
+      'line_items[0][price_data][currency]': charge.currency,
+      'line_items[0][price_data][unit_amount]': String(charge.product),
       'line_items[0][price_data][product_data][name]': `AJLIB — ${quantity} قطع`,
       'line_items[0][price_data][product_data][description]': 'طلب مخصص حسب اللون والمقاس',
       'line_items[0][quantity]': '1',
@@ -120,9 +135,9 @@ export default async function handler(req, res) {
       success_url: `${origin}/?payment=success&id=${encodeURIComponent(order.id)}&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/?payment=cancelled&id=${encodeURIComponent(order.id)}`
     });
-    if (shipping.amount > 0) {
-      params.set('line_items[1][price_data][currency]', 'aed');
-      params.set('line_items[1][price_data][unit_amount]', String(shipping.amount));
+    if (charge.shipping > 0) {
+      params.set('line_items[1][price_data][currency]', charge.currency);
+      params.set('line_items[1][price_data][unit_amount]', String(charge.shipping));
       params.set('line_items[1][price_data][product_data][name]', `الشحن — ${shipping.zone_name}`);
       params.set('line_items[1][price_data][product_data][description]', `المدة التقديرية ${shipping.min_days}-${shipping.max_days} أيام عمل`);
       params.set('line_items[1][quantity]', '1');

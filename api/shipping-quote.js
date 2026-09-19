@@ -1,4 +1,5 @@
 import { isShippingCountry } from './_lib/markets.js';
+import { shippingFeeFils } from './_lib/shipping-policy.js';
 
 // IMPORTANT: these are only a FALLBACK. getZones() below prefers the
 // shipping_zones table whenever Supabase is reachable, so in Preview AND in
@@ -31,22 +32,34 @@ const getZones = async () => {
   return Array.isArray(rows) && rows.length ? rows : fallbackZones;
 };
 
-export const quoteShipping = async (countryCode) => {
+// The customer's shipping FEE comes from the approved quantity ladder
+// (api/_lib/shipping-policy.js); the delivery window still comes from the
+// destination's shipping zone. A quote with no quantity (fulfillment only
+// needs the delivery window) carries amount: null rather than a guess.
+export const quoteShipping = async (countryCode, quantity) => {
   const code = String(countryCode || '').trim().toUpperCase();
   if (!/^[A-Z]{2}$/.test(code)) throw new Error('اختر دولة التوصيل');
   // Approved markets only (api/_lib/markets.js) — enforced here, server-side.
   if (!isShippingCountry(code)) throw new Error('الشحن إلى هذه الدولة غير متاح حاليًا');
+  let amount = null;
+  if (quantity !== undefined) {
+    amount = shippingFeeFils(code, Number(quantity));
+    if (amount == null) throw new Error('أدخل كمية صحيحة');
+  }
   const zones = await getZones();
   const zone = zones.find(item => Array.isArray(item.country_codes) && item.country_codes.includes(code)) || zones.find(item => item.code === 'WORLD');
   if (!zone || zone.active === false) throw new Error('الشحن إلى هذه الدولة غير متاح حاليًا');
-  return { country_code: code, zone_code: zone.code, zone_name: zone.name_ar, amount: Number(zone.amount || 0), currency: String(zone.currency || 'aed').toLowerCase(), min_days: Number(zone.min_days), max_days: Number(zone.max_days), duties_included: false };
+  return { country_code: code, zone_code: zone.code, zone_name: zone.name_ar, amount, currency: 'aed', min_days: Number(zone.min_days), max_days: Number(zone.max_days), duties_included: false };
 };
 
 export default async function handler(req, res) {
   if (!['GET','POST'].includes(req.method)) return res.status(405).json({ error: 'Method not allowed' });
   try {
-    const countryCode = req.method === 'GET' ? req.query.country_code : req.body?.country_code;
-    const quote = await quoteShipping(countryCode);
+    const source = req.method === 'GET' ? req.query : (req.body || {});
+    // The fee depends on the quantity, so a quote without one is refused.
+    const quantity = Number(source.quantity);
+    if (!Number.isInteger(quantity)) throw new Error('أدخل كمية صحيحة');
+    const quote = await quoteShipping(source.country_code, quantity);
     return res.status(200).json(quote);
   } catch (error) {
     return res.status(400).json({ error: error.message || 'تعذر حساب الشحن' });

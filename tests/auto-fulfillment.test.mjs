@@ -69,7 +69,7 @@ const world = ({ methods = US_METHODS, cjDetail = null } = {}) => {
     if (u.pathname.endsWith('/rest/v1/shipping_zones')) return { ok: false, status: 404, json: async () => ({}), text: async () => '' };
     if (u.pathname.endsWith('/rpc/process_paid_inventory') || u.pathname.endsWith('/rpc/check_inventory')) return json([]);
     if (u.hostname === 'api.resend.com') { log.emails.push(JSON.parse(options.body)); return json({ id: 'email' }); }
-    if (u.hostname === 'api.tabby.ai') return json({ id: 'pay_tabby_1', status: 'CLOSED', amount: '419.00', currency: 'AED', created_at: '2026-09-18T10:00:00Z' });
+    if (u.hostname === 'api.tabby.ai') return json({ id: 'pay_tabby_1', status: 'CLOSED', amount: '289.00', currency: 'AED', created_at: '2026-09-18T10:00:00Z' });
     if (u.hostname.includes('cjdropshipping')) {
       log.cj.push(u.pathname);
       if (u.pathname.endsWith('/authentication/getAccessToken')) return json({ code: 200, result: true, data: { accessToken: 'tok', accessTokenExpiryDate: new Date(Date.now() + 3600_000).toISOString() } });
@@ -210,7 +210,7 @@ test('a margin below GREEN goes to REVIEW_REQUIRED', async () => {
   await pay(w, AUTO_ON, { product_amount: '9000', shipping_amount: '0' });
   assert.equal(w.log.creates.length, 0);
   assert.equal(w.only().fulfillment_status, 'REVIEW_REQUIRED');
-  assert.ok(['MARGIN_BELOW_FLOOR', 'FULFILLMENT_REVIEW_REQUIRED', 'MARGIN_NOT_GREEN'].includes(w.only().fulfillment_error));
+  assert.equal(w.only().fulfillment_error, 'MARGIN_BELOW_25_PERCENT');
 });
 
 test('no route inside the delivery promise goes to REVIEW_REQUIRED', async () => {

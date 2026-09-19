@@ -30,11 +30,17 @@ export const CJ_MARGIN_AUTO_PERCENT = Number(process.env.CJ_MARGIN_AUTO_PERCENT 
 export const CJ_MARGIN_REVIEW_FLOOR_PERCENT = Number(process.env.CJ_MARGIN_REVIEW_FLOOR_PERCENT ?? 20);
 export const CJ_MARGIN_TARGET_PERCENT = Number(process.env.CJ_MARGIN_TARGET_PERCENT ?? 30);
 
-// A REVIEW-band order is held, never auto-fulfilled, unless this is
-// explicitly turned on later. Default off, per the approved policy
-// ("do not auto-fulfill unless an explicit configurable policy later
-// allows it").
-export const CJ_ALLOW_REVIEW_BAND_AUTOFULFILL = process.env.CJ_ALLOW_REVIEW_BAND_AUTOFULFILL === 'true';
+// PROFIT GUARD — APPROVED 2026-09-18. A CJ order is auto-created only when
+// BOTH hold on the order's TRUE live economics (live CJ product cost + live
+// CJ freight + sticker + actual payment fee + other known variable cost),
+// in canonical AED:
+//   true net margin >= 25%   else MARGIN_BELOW_25_PERCENT
+//   true net profit >= 30 AED else NET_PROFIT_BELOW_30_AED
+// Anything else goes to REVIEW_REQUIRED with that reason and alerts the
+// owner. Fixed constants, not env-tunable, so the policy cannot drift; the
+// REVIEW band above is informational only and never approves on its own.
+export const PROFIT_GUARD_MIN_MARGIN_PERCENT = 25;
+export const PROFIT_GUARD_MIN_NET_PROFIT_AED = 30;
 
 // Retained name for the hard floor below which fulfillment is blocked.
 export const MIN_ACCEPTABLE_MARGIN_PERCENT = CJ_MARGIN_REVIEW_FLOOR_PERCENT;
@@ -48,6 +54,9 @@ export const MIN_ACCEPTABLE_MARGIN_PERCENT = CJ_MARGIN_REVIEW_FLOOR_PERCENT;
 export const STRIPE_FEE_PERCENT = Number(process.env.STRIPE_FEE_PERCENT ?? 2.9);
 export const STRIPE_FEE_FIXED_AED = Number(process.env.STRIPE_FEE_FIXED_AED ?? 1.0);
 export const STRIPE_INTERNATIONAL_SURCHARGE_PERCENT = Number(process.env.STRIPE_INTERNATIONAL_SURCHARGE_PERCENT ?? 1.0);
+// The "+1% where currency conversion is required" above: applies when the
+// customer paid in USD, since AJLIB settles in AED.
+export const STRIPE_CURRENCY_CONVERSION_PERCENT = Number(process.env.STRIPE_CURRENCY_CONVERSION_PERCENT ?? 1.0);
 
 // Tabby's UAE merchant rate, CONFIRMED for AJLIB: 6.99% + AED 1.50 per
 // transaction. Materially higher than card processing, which is why Tabby

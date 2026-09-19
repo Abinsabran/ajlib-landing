@@ -196,7 +196,7 @@ test('Tabby verify persists shipping_street through the same shared path', async
   let saved = null;
   const fetch = async (url, options = {}) => {
     const u = String(url);
-    if (u.includes('/payments/')) return ok({ id: 'pay_street_1', status: 'CLOSED', amount: '419.00', currency: 'AED', created_at: '2026-09-18T10:00:00Z' });
+    if (u.includes('/payments/')) return ok({ id: 'pay_street_1', status: 'CLOSED', amount: '289.00', currency: 'AED', created_at: '2026-09-18T10:00:00Z' });
     if (u.includes('/rest/v1/orders') && options.method === 'POST') { saved = JSON.parse(options.body); return ok([{ id: 'row-t', ...saved }]); }
     if (u.includes('/rest/v1/orders')) return ok([]);
     if (u.includes('api.resend.com')) return ok({});
