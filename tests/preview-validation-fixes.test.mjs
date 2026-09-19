@@ -96,7 +96,14 @@ test('the storefront order list really does request only granted columns', async
   const { granted } = await loadGrantMigration();
   const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
   const selects = [...html.matchAll(/rest\/v1\/orders\?select=([a-z_,]+)/g)].map(m => m[1].split(','));
-  assert.ok(selects.length >= 1, 'storefront order reads not found');
+  // Customer history now reads through public.my_orders(); it must return
+  // only columns a customer is already granted.
+  assert.match(html, /\/rest\/v1\/rpc\/my_orders/);
+  const migrations = new URL('../supabase/migrations/', import.meta.url);
+  const file = (await readdir(migrations)).find(f => f.endsWith('_customer_my_orders.sql'));
+  const sql = await readFile(new URL(file, migrations), 'utf8');
+  selects.push(sql.match(/returns table \(([\s\S]*?)\n\)/)[1].split(',').map(line => line.trim().split(/\s+/)[0]));
+  assert.equal(selects.at(-1).length, 9);
   for (const columns of selects) {
     const missing = columns.filter(c => !granted.includes(c));
     assert.deepEqual(missing, [], `storefront requests ungranted columns: ${missing}`);
