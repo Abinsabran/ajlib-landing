@@ -114,14 +114,15 @@ create table if not exists public.shipping_zones (
 );
 
 insert into public.shipping_zones(code,name_ar,country_codes,amount,min_days,max_days,sort_order) values
-('AE','الإمارات العربية المتحدة',array['AE'],0,1,3,10),
-('GCC','دول مجلس التعاون الخليجي',array['SA','BH','KW','OM','QA'],4500,3,6,20),
+('AE','الإمارات العربية المتحدة',array['AE'],0,7,14,10),
+('GCC','المملكة العربية السعودية',array['SA'],4500,7,14,20),
+('GCC_EXTENDED','الكويت وقطر والبحرين',array['KW','QA','BH'],4500,10,18,25),
 ('MENA','الشرق الأوسط وشمال أفريقيا',array['DZ','EG','IQ','JO','LB','LY','MA','PS','SD','SY','TN','YE'],7500,5,10,30),
 ('EUROPE','أوروبا',array['AD','AL','AT','AX','BA','BE','BG','BY','CH','CY','CZ','DE','DK','EE','ES','FI','FO','FR','GB','GG','GI','GR','HR','HU','IE','IM','IS','IT','JE','LI','LT','LU','LV','MC','MD','ME','MK','MT','NL','NO','PL','PT','RO','RS','RU','SE','SI','SJ','SK','SM','TR','UA','VA'],11000,6,12,40),
 ('ASIA','آسيا',array['AF','AM','AZ','BD','BN','BT','CN','GE','HK','ID','IN','JP','KG','KH','KP','KR','KZ','LA','LK','MM','MN','MO','MV','MY','NP','PH','PK','SG','TH','TJ','TL','TM','TW','UZ','VN'],12000,7,14,50),
 ('AFRICA','أفريقيا',array['AO','BF','BI','BJ','BW','CD','CF','CG','CI','CM','CV','DJ','ER','ET','GA','GH','GM','GN','GQ','GW','KE','KM','LR','LS','MG','ML','MR','MU','MW','MZ','NA','NE','NG','RE','RW','SC','SH','SL','SN','SO','SS','ST','SZ','TD','TG','TZ','UG','YT','ZA','ZM','ZW'],13500,8,16,60),
-('AMERICAS','الأمريكيتان والكاريبي',array['AG','AI','AR','AW','BB','BL','BM','BO','BQ','BR','BS','BZ','CA','CL','CO','CR','CU','CW','DM','DO','EC','FK','GD','GF','GL','GP','GS','GT','GY','HN','HT','JM','KN','KY','LC','MF','MQ','MS','MX','NI','PA','PE','PM','PR','PY','SR','SV','SX','TC','TT','US','UY','VC','VE','VG','VI'],15000,8,16,70),
-('OCEANIA','أستراليا ونيوزيلندا وجزر المحيط الهادئ',array['AS','AU','CC','CK','CX','FJ','FM','GU','HM','KI','MH','MP','NC','NF','NR','NU','NZ','PF','PG','PN','PW','SB','TK','TO','TV','UM','VU','WF','WS'],17000,9,18,80),
+('AMERICAS','الأمريكيتان والكاريبي',array['AG','AI','AR','AW','BB','BL','BM','BO','BQ','BR','BS','BZ','CA','CL','CO','CR','CU','CW','DM','DO','EC','FK','GD','GF','GL','GP','GS','GT','GY','HN','HT','JM','KN','KY','LC','MF','MQ','MS','MX','NI','PA','PE','PM','PR','PY','SR','SV','SX','TC','TT','US','UY','VC','VE','VG','VI'],15000,7,14,70),
+('OCEANIA','أستراليا ونيوزيلندا وجزر المحيط الهادئ',array['AS','AU','CC','CK','CX','FJ','FM','GU','HM','KI','MH','MP','NC','NF','NR','NU','NZ','PF','PG','PN','PW','SB','TK','TO','TV','UM','VU','WF','WS'],17000,7,14,80),
 ('WORLD','بقية دول العالم',array[]::text[],19000,10,21,999)
 on conflict (code) do update set
   name_ar=excluded.name_ar,country_codes=excluded.country_codes,amount=excluded.amount,

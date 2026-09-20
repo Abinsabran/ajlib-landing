@@ -15,6 +15,10 @@ import { buildValidatedOrder, OrderValidationError } from '../api/_lib/order-val
 // for any other country is rejected by the API itself.
 
 const APPROVED = ['AE', 'SA', 'KW', 'QA', 'BH', 'US', 'AU'];
+const DELIVERY_WINDOWS = {
+  AE: [7, 14], SA: [7, 14], US: [7, 14], AU: [7, 14],
+  KW: [10, 18], QA: [10, 18], BH: [10, 18]
+};
 // Oman first (removed: DDU route), then a spread of every former zone.
 const REJECTED = ['OM', 'GB', 'FR', 'DE', 'EG', 'JO', 'IN', 'CN', 'NZ', 'CA', 'MX', 'BR', 'ZA', 'NG', 'TR', 'IL', 'XK', 'ZZ'];
 // Every ISO 3166-1 alpha-2 code the storefront used to offer.
@@ -58,10 +62,12 @@ test('all 7 approved markets are accepted by quoteShipping, order-quote and ship
   for (const code of APPROVED) {
     const quote = await quoteShipping(code);
     assert.equal(quote.country_code, code);
+    assert.deepEqual([quote.min_days, quote.max_days], DELIVERY_WINDOWS[code], `${code} delivery promise`);
 
     const res = await orderQuote(code);
     assert.equal(res.statusCode, 200, `order-quote ${code}`);
     assert.deepEqual(res.body.supportedCountries, APPROVED);
+    assert.deepEqual([res.body.minDays, res.body.maxDays], DELIVERY_WINDOWS[code], `${code} order-quote promise`);
 
     const shipping = await shippingQuoteHandler({ method: 'GET', query: { country_code: code, quantity: '10' } }, makeRes());
     assert.equal(shipping.statusCode, 200, `shipping-quote ${code}`);

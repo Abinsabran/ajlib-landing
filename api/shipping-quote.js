@@ -12,13 +12,14 @@ const fallbackZones = [
   // supports (the AE routes actually selected are 7-10 and 7-11 days). The
   // previous 1-3 day window was not achievable by any available CJ route.
   { code: 'AE', name_ar: 'الإمارات العربية المتحدة', country_codes: ['AE'], amount: 0, min_days: 7, max_days: 14 },
-  { code: 'GCC', name_ar: 'دول مجلس التعاون الخليجي', country_codes: ['SA','BH','KW','OM','QA'], amount: 4500, min_days: 3, max_days: 6 },
+  { code: 'GCC', name_ar: 'المملكة العربية السعودية', country_codes: ['SA'], amount: 4500, min_days: 7, max_days: 14 },
+  { code: 'GCC_EXTENDED', name_ar: 'الكويت وقطر والبحرين', country_codes: ['KW','QA','BH'], amount: 4500, min_days: 10, max_days: 18 },
   { code: 'MENA', name_ar: 'الشرق الأوسط وشمال أفريقيا', country_codes: ['DZ','EG','IQ','JO','LB','LY','MA','PS','SD','SY','TN','YE'], amount: 7500, min_days: 5, max_days: 10 },
   { code: 'EUROPE', name_ar: 'أوروبا', country_codes: 'AD AL AT AX BA BE BG BY CH CY CZ DE DK EE ES FI FO FR GB GG GI GR HR HU IE IM IS IT JE LI LT LU LV MC MD ME MK MT NL NO PL PT RO RS RU SE SI SJ SK SM TR UA VA'.split(' '), amount: 11000, min_days: 6, max_days: 12 },
   { code: 'ASIA', name_ar: 'آسيا', country_codes: 'AF AM AZ BD BN BT CN GE HK ID IN JP KG KH KP KR KZ LA LK MM MN MO MV MY NP PH PK SG TH TJ TL TM TW UZ VN'.split(' '), amount: 12000, min_days: 7, max_days: 14 },
   { code: 'AFRICA', name_ar: 'أفريقيا', country_codes: 'AO BF BI BJ BW CD CF CG CI CM CV DJ ER ET GA GH GM GN GQ GW KE KM LR LS MG ML MR MU MW MZ NA NE NG RE RW SC SH SL SN SO SS ST SZ TD TG TZ UG YT ZA ZM ZW'.split(' '), amount: 13500, min_days: 8, max_days: 16 },
-  { code: 'AMERICAS', name_ar: 'الأمريكيتان والكاريبي', country_codes: 'AG AI AR AW BB BL BM BO BQ BR BS BZ CA CL CO CR CU CW DM DO EC FK GD GF GL GP GS GT GY HN HT JM KN KY LC MF MQ MS MX NI PA PE PM PR PY SR SV SX TC TT US UY VC VE VG VI'.split(' '), amount: 15000, min_days: 8, max_days: 16 },
-  { code: 'OCEANIA', name_ar: 'أستراليا ونيوزيلندا وجزر المحيط الهادئ', country_codes: 'AS AU CC CK CX FJ FM GU HM KI MH MP NC NF NR NU NZ PF PG PN PW SB TK TO TV UM VU WF WS'.split(' '), amount: 17000, min_days: 9, max_days: 18 },
+  { code: 'AMERICAS', name_ar: 'الأمريكيتان والكاريبي', country_codes: 'AG AI AR AW BB BL BM BO BQ BR BS BZ CA CL CO CR CU CW DM DO EC FK GD GF GL GP GS GT GY HN HT JM KN KY LC MF MQ MS MX NI PA PE PM PR PY SR SV SX TC TT US UY VC VE VG VI'.split(' '), amount: 15000, min_days: 7, max_days: 14 },
+  { code: 'OCEANIA', name_ar: 'أستراليا ونيوزيلندا وجزر المحيط الهادئ', country_codes: 'AS AU CC CK CX FJ FM GU HM KI MH MP NC NF NR NU NZ PF PG PN PW SB TK TO TV UM VU WF WS'.split(' '), amount: 17000, min_days: 7, max_days: 14 },
   { code: 'WORLD', name_ar: 'الشحن الدولي', country_codes: [], amount: 19000, min_days: 10, max_days: 21 }
 ];
 

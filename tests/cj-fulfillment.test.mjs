@@ -637,7 +637,7 @@ test('CJ\'s real "Interface not found" balance response blocks fulfillment inste
 test('prepareFulfillment refuses to run without an explicit delivery promise (an absent promise is not "any speed")', async () => {
   // Live AE data: the cheapest route is CJPacket Eub with 12-50 day aging,
   // so an unconstrained "cheapest" would auto-select a possibly 50-day
-  // shipment against a 1-3 day published promise.
+  // shipment against an intentionally strict 1-3 day test promise.
   await assert.rejects(
     () => prepareFulfillment({
       order_number: 'AJ-NOPROMISE', items: [{ variant: 'أسود-L', quantity: 5 }],
@@ -647,7 +647,7 @@ test('prepareFulfillment refuses to run without an explicit delivery promise (an
   );
 });
 
-test('with AE\'s real published promise (max 3 days) no live CJ route qualifies — fulfillment blocks rather than over-promising', () => {
+test('with an explicit strict promise (max 3 days) no live CJ route qualifies — fulfillment blocks rather than over-promising', () => {
   // Exactly the live AE qty-5 method set, including real aging strings.
   const liveAeMethods = [
     { logisticName: 'CJPacket Eub', totalPostageFee: 10.52, logisticAging: '12-50' },

@@ -120,7 +120,8 @@ export const isExcludedLogisticsMethod = (name, exactList = EXCLUDED_LOGISTICS_M
 // US: YunExpress Ordinary, approved 2026-09-18 for the first controlled US
 // order — live quote 4-7 days vs LuWei Ordinary US 5-11 days for ~$1.70
 // more at 10 units, and still available at 15 units where LuWei is not.
-// The customer-facing US promise (shipping_zones, 8-16 days) is unchanged.
+// The customer-facing US promise is read from shipping_zones (currently 7-14
+// business days); route preference itself remains unchanged.
 export const MARKET_OVERRIDES = Object.freeze({
   US: Object.freeze({ preferredMethods: Object.freeze(['YunExpress Ordinary']) })
 });
