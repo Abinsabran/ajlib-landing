@@ -29,6 +29,15 @@ test('a CJ DISPATCHED order advances to shipped and publishes previously stored 
   assert.equal(patch.tracking_number,'YT1');
   assert.equal(patch.shipping_company,'YunExpress');
 });
+test('CJ last-mile Updating placeholder never replaces a real shipped tracking number', () => {
+  const detail = { orderStatus:'DISPATCHED', trackNumber:'YT2626200701846673' };
+  const track = { trackingNumber:'YT2626200701846673', lastTrackNumber:'Updating' };
+  const first = buildTrackingPatch({ status:'packed', tracking_number:null }, detail, track);
+  assert.equal(first.patch.tracking_number,'YT2626200701846673');
+  const recovery = buildTrackingPatch({ status:'shipped', tracking_number:'Updating' }, detail, track);
+  assert.equal(recovery.patch.tracking_number,'YT2626200701846673');
+  assert.equal(recovery.patch.status,undefined,'tracking repair must not create another status transition');
+});
 test('the additive migration queues only real safe transitions with unique per-channel events and private ownership', async () => {
   const sql = await readFile(new URL('../supabase/migrations/20260922190000_order_status_notifications.sql',import.meta.url),'utf8');
   assert.match(sql,/unique \(order_id, customer_status, channel\)/);

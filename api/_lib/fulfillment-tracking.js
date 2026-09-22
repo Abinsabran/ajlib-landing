@@ -24,10 +24,16 @@ export const effectiveCjStatus = (detail) => {
 // confirmation; UNPAID: "order confirmed, payment pending").
 export const CJ_AWAITING_PAYMENT_STATUSES = Object.freeze(['CREATED', 'IN_CART', 'UNPAID']);
 const CJ_PAID_STATUSES = Object.freeze(['UNSHIPPED', 'PENDING', 'PROCESSING', 'DISPATCHED', 'SHIPPED', 'DELIVERED']);
+// CJ may return a progress placeholder in lastTrackNumber before a last-mile
+// number exists. Never publish that placeholder instead of the real CJ number.
+const usableTrackingNumber = (value) => {
+  const number = String(value ?? '').trim();
+  return number && !/^updating$/i.test(number) ? number : null;
+};
 
 export const buildTrackingPatch = (orderRow, detail, track, now = new Date().toISOString()) => {
   const cjStatus = effectiveCjStatus(detail);
-  const trackNumber = detail?.trackNumber || track?.trackingNumber || null;
+  const trackNumber = usableTrackingNumber(detail?.trackNumber) || usableTrackingNumber(track?.trackingNumber);
   const carrier = track?.lastMileCarrier || detail?.trackingProvider || track?.logisticName || detail?.logisticName || null;
   const awaitingPayment = CJ_AWAITING_PAYMENT_STATUSES.includes(cjStatus);
   // Paid once CJ records a payment date or has moved past the unpaid states.
@@ -55,9 +61,9 @@ export const buildTrackingPatch = (orderRow, detail, track, now = new Date().toI
   // overwrites details an admin entered by hand.
   const shipped = ['shipped', 'delivered'].includes(patch.status || orderRow.status);
   if (shipped) {
-    const customerNumber = track?.lastTrackNumber || trackNumber || orderRow.fulfillment_tracking_number;
+    const customerNumber = usableTrackingNumber(track?.lastTrackNumber) || trackNumber || usableTrackingNumber(orderRow.fulfillment_tracking_number);
     const customerCarrier = track?.lastMileCarrier || detail?.trackingProvider || orderRow.fulfillment_carrier || null;
-    if (customerNumber && !orderRow.tracking_number) patch.tracking_number = customerNumber;
+    if (customerNumber && !usableTrackingNumber(orderRow.tracking_number)) patch.tracking_number = customerNumber;
     if (customerCarrier && !orderRow.shipping_company) patch.shipping_company = customerCarrier;
   }
   return { cjStatus, patch };
