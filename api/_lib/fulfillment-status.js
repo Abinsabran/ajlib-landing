@@ -48,6 +48,7 @@ export const PROVIDER_STATUS_MAP = Object.freeze({
   PENDING: 'processing',
   UNSHIPPED: 'processing', // generic parent of PENDING/PROCESSING if CJ returns it without a sub-status
   PROCESSING: 'packed',
+  DISPATCHED: 'shipped',
   SHIPPED: 'shipped',
   DELIVERED: 'delivered',
   CANCELLED: 'cancelled'

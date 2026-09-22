@@ -7,6 +7,7 @@ import { buildValidatedOrder, OrderValidationError } from './_lib/order-validati
 import { persistPaidOrder } from './stripe-webhook.js';
 import { handleAdminFulfillment } from './_lib/admin-fulfillment.js';
 import { syncOpenOrders } from './_lib/fulfillment-tracking.js';
+import { deliverOrderNotifications } from './_lib/order-notifications.js';
 import { SHIPPING_COUNTRIES } from './_lib/markets.js';
 import { paymentOptions } from './_lib/payment-currency.js';
 
@@ -373,7 +374,13 @@ const handleFulfillmentSync = async (req, res) => {
   res.setHeader?.('Cache-Control', 'private, no-store, max-age=0');
   const secret = process.env.CRON_SECRET;
   if (!secret || String(req.headers?.authorization || '') !== `Bearer ${secret}`) return res.status(401).json({ error: 'Unauthorized' });
-  return res.status(200).json(await syncOpenOrders());
+  // A CJ failure cannot strand already queued email/push events. Conversely,
+  // a notification-provider failure must never roll back fulfillment.
+  let sync;
+  try { sync = await syncOpenOrders(); } catch { sync = { ok: false, reason: 'SYNC_FAILED' }; }
+  let notifications;
+  try { notifications = await deliverOrderNotifications(); } catch { notifications = { ok: false, reason: 'NOTIFICATION_DELIVERY_FAILED' }; }
+  return res.status(sync.ok === false ? 502 : 200).json({ ...sync, notifications });
 };
 
 const HANDLERS = {

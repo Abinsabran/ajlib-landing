@@ -1,13 +1,5 @@
 const jsonHeaders = { 'Content-Type': 'application/json' };
 const allowedStatuses = new Set(['paid', 'processing', 'packed', 'shipped', 'delivered', 'cancelled', 'refunded']);
-const statusLabels = {
-  paid: 'تم الدفع', processing: 'قيد التجهيز', packed: 'جاهز للشحن',
-  shipped: 'تم الشحن', delivered: 'تم التسليم', cancelled: 'تم إلغاء الطلب', refunded: 'تم استرجاع المبلغ'
-};
-
-const escapeHtml = (value = '') => String(value).replace(/[&<>"']/g, char => ({
-  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
-}[char]));
 
 const requireAdmin = async (authorization = '') => {
   const token = String(authorization).replace(/^Bearer\s+/i, '');
@@ -36,43 +28,9 @@ const databaseRequest = async (path, options = {}) => {
   return data;
 };
 
-const sendStatusEmail = async (order, previousStatus) => {
-  if (!order.customer_email || order.status === previousStatus) return false;
-  const tracking = order.tracking_number
-    ? `<div style="background:#eef4ef;border-radius:12px;padding:14px;margin:18px 0"><b>شركة الشحن:</b> ${escapeHtml(order.shipping_company || 'سيتم تحديدها')}<br><b>رقم التتبع:</b> <span dir="ltr">${escapeHtml(order.tracking_number)}</span></div>`
-    : '';
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-      ...jsonHeaders,
-      'User-Agent': 'ajlib-store/1.0',
-      'Idempotency-Key': `ajlib-status-${order.id}-${order.status}-${new Date(order.updated_at).getTime()}`
-    },
-    body: JSON.stringify({
-      from: process.env.ORDER_FROM_EMAIL || 'AJLIB Orders <orders@ajlib.store>',
-      to: [order.customer_email],
-      reply_to: process.env.ORDER_NOTIFICATION_EMAIL || 'support@ajlib.store',
-      subject: `تحديث طلب AJLIB ${order.order_number} — ${statusLabels[order.status]}`,
-      html: `<div dir="rtl" style="font-family:Arial,sans-serif;line-height:1.9;color:#171914;max-width:620px;margin:auto;border:1px solid #ded8ca;border-radius:18px;padding:28px">
-        <div style="color:#b58a3c;font-weight:800">AJLIB</div>
-        <h1 style="color:#26352d">تحديث حالة طلبك</h1>
-        <p>مرحبًا ${escapeHtml(order.customer_name || 'عميل AJLIB')}،</p>
-        <p>تم تحديث الطلب <b dir="ltr">${escapeHtml(order.order_number)}</b> إلى:</p>
-        <div style="background:#26352d;color:#fff;border-radius:14px;padding:16px;text-align:center;font-size:20px;font-weight:800">${escapeHtml(statusLabels[order.status])}</div>
-        ${tracking}
-        <p>يمكنك متابعة آخر حالة من قسم «طلباتي» في <a href="https://www.ajlib.store/">موقع AJLIB</a>.</p>
-        <p style="color:#686b62;font-size:13px">للمساعدة: support@ajlib.store · +971 50 110 9215</p>
-      </div>`
-    })
-  });
-  if (!response.ok) throw new Error('تم تحديث الطلب لكن تعذر إرسال البريد للعميل');
-  return true;
-};
-
 export default async function handler(req, res) {
   if (req.method !== 'PATCH') return res.status(405).json({ error: 'Method not allowed' });
-  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SECRET_KEY || !process.env.SUPABASE_PUBLISHABLE_KEY || !process.env.RESEND_API_KEY) {
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SECRET_KEY || !process.env.SUPABASE_PUBLISHABLE_KEY) {
     return res.status(503).json({ error: 'خدمة إشعارات الطلبات غير مكتملة الإعداد' });
   }
   try {
@@ -82,7 +40,6 @@ export default async function handler(req, res) {
 
     const current = await databaseRequest(`/rest/v1/orders?id=eq.${encodeURIComponent(id)}&select=*`);
     if (!current?.[0]) return res.status(404).json({ error: 'الطلب غير موجود' });
-    const previous = current[0];
     const updates = {};
     if (req.body.status !== undefined) {
       if (!allowedStatuses.has(req.body.status)) return res.status(400).json({ error: 'حالة الطلب غير مدعومة' });
@@ -96,8 +53,11 @@ export default async function handler(req, res) {
       method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(updates)
     });
     const order = updated?.[0];
-    const emailSent = updates.status ? await sendStatusEmail(order, previous.status) : false;
-    return res.status(200).json({ order, emailSent });
+    // The database trigger queues email + push in the same transaction as a
+    // real customer-stage change. The cron worker delivers them separately.
+    return res.status(200).json({ order, emailSent: false,
+      notificationQueued: Boolean(updates.status && updates.status !== current[0].status &&
+        ['paid','processing','packed','shipped','delivered'].includes(order?.status)) });
   } catch (error) {
     return res.status(500).json({ error: error.message || 'تعذر تحديث الطلب' });
   }

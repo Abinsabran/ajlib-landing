@@ -23,7 +23,7 @@ export const effectiveCjStatus = (detail) => {
 // CJ's documented statuses before payment (CREATED/IN_CART: awaiting
 // confirmation; UNPAID: "order confirmed, payment pending").
 export const CJ_AWAITING_PAYMENT_STATUSES = Object.freeze(['CREATED', 'IN_CART', 'UNPAID']);
-const CJ_PAID_STATUSES = Object.freeze(['UNSHIPPED', 'PENDING', 'PROCESSING', 'SHIPPED', 'DELIVERED']);
+const CJ_PAID_STATUSES = Object.freeze(['UNSHIPPED', 'PENDING', 'PROCESSING', 'DISPATCHED', 'SHIPPED', 'DELIVERED']);
 
 export const buildTrackingPatch = (orderRow, detail, track, now = new Date().toISOString()) => {
   const cjStatus = effectiveCjStatus(detail);
@@ -55,8 +55,8 @@ export const buildTrackingPatch = (orderRow, detail, track, now = new Date().toI
   // overwrites details an admin entered by hand.
   const shipped = ['shipped', 'delivered'].includes(patch.status || orderRow.status);
   if (shipped) {
-    const customerNumber = track?.lastTrackNumber || trackNumber;
-    const customerCarrier = track?.lastMileCarrier || detail?.trackingProvider || null;
+    const customerNumber = track?.lastTrackNumber || trackNumber || orderRow.fulfillment_tracking_number;
+    const customerCarrier = track?.lastMileCarrier || detail?.trackingProvider || orderRow.fulfillment_carrier || null;
     if (customerNumber && !orderRow.tracking_number) patch.tracking_number = customerNumber;
     if (customerCarrier && !orderRow.shipping_company) patch.shipping_company = customerCarrier;
   }
@@ -83,6 +83,8 @@ export const syncTracking = async (orderRow) => {
   }
 
   const { cjStatus, patch } = buildTrackingPatch(orderRow, detail, track);
+  // The database status trigger queues customer notifications atomically only
+  // when the customer-safe stage actually changes. Polling by itself is silent.
   const saved = await patchOrder(orderRow.id, patch);
   return {
     synced: saved === true,
