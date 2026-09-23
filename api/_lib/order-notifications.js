@@ -32,10 +32,15 @@ export const customerNotificationCopy = (status, language, orderNumber) => {
   if (!copy) throw new Error('Unsupported customer status');
   return { language: locale, title: copy[0], body: `${copy[1]} ${locale === 'ar' ? 'رقم الطلب:' : 'Order:'} ${orderNumber}` };
 };
+const usableTrackingNumber = (value) => {
+  const number = String(value ?? '').trim();
+  return number && !/^updating$/i.test(number) ? number : null;
+};
 export const safeTrackingForNotification = (order, status) => {
-  if (!['SHIPPED', 'DELIVERED'].includes(status) || !order.tracking_number) return null;
+  const number = usableTrackingNumber(order.tracking_number);
+  if (!['SHIPPED', 'DELIVERED'].includes(status) || !number) return null;
   const url = String(order.fulfillment_tracking_url || '');
-  return { number: order.tracking_number, carrier: order.shipping_company || null,
+  return { number, carrier: order.shipping_company || null,
     url: /^https:\/\/t\.17track\.net\//i.test(url) ? url : null };
 };
 const patchEvent = (id, patch) => db(`/rest/v1/order_notification_events?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) });
@@ -43,9 +48,28 @@ const patchToken = (id, patch) => db(`/rest/v1/order_push_tokens?id=eq.${encodeU
 const patchDelivery = (eventId, tokenId, patch) => db(`/rest/v1/order_push_deliveries?event_id=eq.${encodeURIComponent(eventId)}&token_id=eq.${encodeURIComponent(tokenId)}`, { method: 'PATCH', body: JSON.stringify(patch) });
 
 const contextFor = async (event) => {
-  const orders = await db(`/rest/v1/orders?id=eq.${encodeURIComponent(event.order_id)}&select=id,order_number,customer_email,user_id,status,tracking_number,shipping_company,fulfillment_tracking_url`);
+  const orders = await db(`/rest/v1/orders?id=eq.${encodeURIComponent(event.order_id)}&select=id,order_number,customer_email,user_id,status,tracking_number,fulfillment_tracking_number,shipping_company,fulfillment_tracking_url`);
   const order = orders?.[0];
   if (!order) throw new Error('Order no longer exists');
+  // Repair an old provider placeholder before sending SHIPPED/DELIVERED mail.
+  // The conditional write persists the real number first; the unchanged
+  // status does not queue another notification. A concurrent manual edit wins.
+  if (['shipped', 'delivered'].includes(order.status) && !usableTrackingNumber(order.tracking_number)) {
+    const realNumber = usableTrackingNumber(order.fulfillment_tracking_number);
+    if (realNumber) {
+      const oldNumber = order.tracking_number;
+      const filter = oldNumber == null ? 'is.null' : `eq.${encodeURIComponent(oldNumber)}`;
+      const saved = await db(`/rest/v1/orders?id=eq.${encodeURIComponent(order.id)}&status=in.(shipped,delivered)&tracking_number=${filter}&select=tracking_number`, {
+        method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ tracking_number: realNumber })
+      });
+      if (saved?.length) order.tracking_number = saved[0].tracking_number;
+      else {
+        const current = await db(`/rest/v1/orders?id=eq.${encodeURIComponent(order.id)}&select=status,tracking_number`);
+        order.status = current?.[0]?.status || order.status;
+        order.tracking_number = current?.[0]?.tracking_number || null;
+      }
+    }
+  }
   const notes = await db(`/rest/v1/order_notifications?order_id=eq.${encodeURIComponent(order.id)}&customer_status=eq.${event.customer_status}&select=user_id`);
   const userId = notes?.[0]?.user_id || order.user_id || null;
   const profiles = userId ? await db(`/rest/v1/profiles?id=eq.${encodeURIComponent(userId)}&select=preferred_language`) : [];

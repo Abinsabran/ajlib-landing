@@ -21,6 +21,9 @@ test('tracking remains hidden until shipped, even if the provider stored it earl
   assert.equal(safeTrackingForNotification(row,'SHIPPED').number,'YT1');
   assert.equal(customerStatusFor('shipped'),'SHIPPED');
 });
+test('a provider Updating placeholder is never included in customer email tracking', () => {
+  assert.equal(safeTrackingForNotification({tracking_number:'Updating'},'SHIPPED'),null);
+});
 test('a CJ DISPATCHED order advances to shipped and publishes previously stored tracking', () => {
   const order = { status:'packed',fulfillment_tracking_number:'YT1',fulfillment_carrier:'YunExpress' };
   const { cjStatus,patch } = buildTrackingPatch(order,{orderStatus:'DISPATCHED'},null,'2026-09-22T12:00:00Z');
@@ -60,15 +63,20 @@ test('status email links to the owned order without exposing fulfillment data', 
 
 const reply = (data,status=200) => ({ ok:status>=200&&status<300,status,
   text:async()=>data===null?'':JSON.stringify(data),json:async()=>data });
-const withWorld = async (events, work, { resendFails = false, resendThrows = false, expoTicket = { status:'ok',id:'ticket-1' }, tokens = [{id:'token-1',token:'ExpoPushToken[abcdefghijklmnop]'}], orderStatus = 'shipped' } = {}) => {
+const withWorld = async (events, work, { resendFails = false, resendThrows = false, expoTicket = { status:'ok',id:'ticket-1' }, tokens = [{id:'token-1',token:'ExpoPushToken[abcdefghijklmnop]'}], orderStatus = 'shipped', trackingNumber = 'YT1' } = {}) => {
   const priorFetch=globalThis.fetch, priorEnv={ SUPABASE_URL:process.env.SUPABASE_URL,SUPABASE_SECRET_KEY:process.env.SUPABASE_SECRET_KEY,RESEND_API_KEY:process.env.RESEND_API_KEY };
   process.env.SUPABASE_URL='https://test.supabase.co';process.env.SUPABASE_SECRET_KEY='test-secret';process.env.RESEND_API_KEY='test-resend';
-  const calls={email:0,push:0,events:[],tokens:[],deliveries:[]};
+  const calls={email:0,push:0,events:[],tokens:[],deliveries:[],orderPatches:[],sequence:[],emailBody:null};
   let claimed=false;
+  let storedTrackingNumber=trackingNumber;
   globalThis.fetch=async (input,options={})=>{
     const url=String(input),body=options.body?JSON.parse(options.body):null;
     if(url.endsWith('/rpc/claim_order_notification_events')){const batch=claimed?[]:events;claimed=true;return reply(batch)}
-    if(url.includes('/rest/v1/orders?'))return reply([{id:'order-1',order_number:'AJ12345678',customer_email:'customer@example.test',user_id:'user-1',status:orderStatus,tracking_number:'YT1',shipping_company:'YunExpress',fulfillment_tracking_url:'https://t.17track.net/en#nums=YT1'}]);
+    if(url.includes('/rest/v1/orders?')&&options.method==='PATCH'){
+      calls.orderPatches.push(body);calls.sequence.push('persist-tracking');storedTrackingNumber=body.tracking_number;
+      return reply([{tracking_number:storedTrackingNumber}]);
+    }
+    if(url.includes('/rest/v1/orders?'))return reply([{id:'order-1',order_number:'AJ12345678',customer_email:'customer@example.test',user_id:'user-1',status:orderStatus,tracking_number:storedTrackingNumber,fulfillment_tracking_number:'YT1',shipping_company:'YunExpress',fulfillment_tracking_url:'https://t.17track.net/en#nums=YT1'}]);
     if(url.includes('/rest/v1/order_notifications?'))return reply([{user_id:'user-1'}]);
     if(url.includes('/rest/v1/profiles?'))return reply([{preferred_language:'ar'}]);
     if(url.includes('/rest/v1/order_push_tokens?')&&options.method==='PATCH'){calls.tokens.push(body);return reply(null)}
@@ -79,7 +87,7 @@ const withWorld = async (events, work, { resendFails = false, resendThrows = fal
     if(url.includes('/rest/v1/order_push_deliveries?')&&url.includes('receipt_checked_at=is.null'))return reply([]);
     if(url.includes('/rest/v1/order_push_deliveries?'))return reply([{state:'pending'}]);
     if(url.includes('/rest/v1/order_notification_events?')&&options.method==='PATCH'){calls.events.push(body);return reply(null)}
-    if(url==='https://api.resend.com/emails'){calls.email++;if(resendThrows)throw new Error('Connection lost');return reply(resendFails?{message:'fail'}:{id:'email-1'},resendFails?503:200)}
+    if(url==='https://api.resend.com/emails'){calls.email++;calls.sequence.push('send-email');calls.emailBody=body;if(resendThrows)throw new Error('Connection lost');return reply(resendFails?{message:'fail'}:{id:'email-1'},resendFails?503:200)}
     if(url.endsWith('/push/send')){calls.push++;return reply({data:expoTicket})}
     throw new Error(`Unexpected test request ${url}`);
   };
@@ -88,6 +96,17 @@ const withWorld = async (events, work, { resendFails = false, resendThrows = fal
     for(const [key,value] of Object.entries(priorEnv)) if(value===undefined)delete process.env[key];else process.env[key]=value;
   }
 };
+
+test('SHIPPED persists real tracking before email and keeps the existing link', async () => {
+  await withWorld([{id:'event-email',order_id:'order-1',customer_status:'SHIPPED',channel:'email',attempts:1}], async calls => {
+    assert.equal((await deliverOrderNotifications()).failed,0);
+    assert.deepEqual(calls.sequence,['persist-tracking','send-email']);
+    assert.deepEqual(calls.orderPatches,[{tracking_number:'YT1'}]);
+    assert.match(calls.emailBody.html,/YT1/);
+    assert.match(calls.emailBody.html,/https:\/\/t\.17track\.net\/en#nums=YT1/);
+    assert.doesNotMatch(calls.emailBody.html,/Updating/);
+  }, {trackingNumber:'Updating'});
+});
 
 test('one event per channel sends once, and a repeated cron claim sends nothing', async () => {
   await withWorld([
