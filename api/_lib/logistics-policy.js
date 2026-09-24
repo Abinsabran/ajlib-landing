@@ -58,6 +58,15 @@ export const STRIPE_INTERNATIONAL_SURCHARGE_PERCENT = Number(process.env.STRIPE_
 // customer paid in USD, since AJLIB settles in AED.
 export const STRIPE_CURRENCY_CONVERSION_PERCENT = Number(process.env.STRIPE_CURRENCY_CONVERSION_PERCENT ?? 1.0);
 
+// Ziina Business published fees (2026-09-23): 2.6% + AED 1, plus 1.5%
+// for an international card and/or non-AED charge; VAT is 5% of the fee.
+// Until Ziina documents the denomination of fee_amount, the profit guard
+// uses the conservative surcharge even if the card might be domestic.
+export const ZIINA_FEE_PERCENT = 2.6;
+export const ZIINA_FEE_FIXED_AED = 1;
+export const ZIINA_SURCHARGE_PERCENT = 1.5;
+export const ZIINA_FEE_VAT_PERCENT = 5;
+
 // Tabby's UAE merchant rate, CONFIRMED for AJLIB: 6.99% + AED 1.50 per
 // transaction. Materially higher than card processing, which is why Tabby
 // margin is scored separately rather than assumed equal to Stripe.

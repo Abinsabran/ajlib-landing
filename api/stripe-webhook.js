@@ -116,7 +116,7 @@ const sendOrderEmail = async (session) => {
         <p style="color:#686b62">قد تختلف الرسوم الجمركية والضرائب حسب خط الشحن وبلد الاستلام.</p>
         <p><b>ملاحظات:</b> ${escapeHtml(metadata.notes || 'لا توجد')}</p>
         <hr><h2>الألوان والمقاسات</h2><ul>${formatItems(metadata.items)}</ul>
-        <p style="color:#686b62">تم إرسال هذه الرسالة بعد تأكيد الدفع من Stripe.</p>
+        <p style="color:#686b62">تم إرسال هذه الرسالة بعد تأكيد الدفع${session.provider === 'ziina' ? ' من Ziina' : ' من Stripe'}.</p>
       </div>`
     })
   });
@@ -175,6 +175,15 @@ const saveOrder = async (session) => {
       status: 'paid',
       stripe_session_id: session.id,
       stripe_payment_intent_id: session.payment_intent || null,
+      ...(session.provider === 'ziina' ? {
+        payment_provider: 'ziina',
+        provider_payment_id: session.provider_payment_id,
+        provider_operation_id: session.provider_operation_id || null,
+        provider_status: 'completed',
+        provider_fee_amount: session.provider_fee_amount ?? null,
+        provider_fee_currency: session.provider_fee_currency || null,
+        provider_settled_amount_aed: session.provider_settled_amount_aed
+      } : {}),
       // paid_at comes from the payment provider's own timestamp (Stripe's
       // session.created; Tabby's payment created_at). It is only written
       // when that timestamp is real. Omitting it — rather than falling back

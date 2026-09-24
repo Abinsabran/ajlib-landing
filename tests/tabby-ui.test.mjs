@@ -187,10 +187,10 @@ test('returning without a stored order (e.g. the app flow) shows guidance and ca
 
 // ---- Stripe unchanged, routes, secrets, labels ---------------------------------------------
 
-test('the card (Stripe) path is unchanged: only a Tabby selection is diverted', () => {
-  assert.match(html, /if\(selectedPayMethod\(\)==='tabby'\)return startTabbyCheckout\(button,data,id\);button\.disabled=true;button\.textContent='جارٍ حفظ البيانات وتجهيز صفحة Stripe…';/);
-  // Card path: only the chosen payment currency is sent; every amount is the server's.
-  assert.match(html, /fetch\('\/api\/checkout-session',\{method:'POST',headers,body:JSON\.stringify\(\{id,customer:data,cart,payment_currency:data\.payment_currency==='usd'\?'usd':'aed'\}\)\}\)/);
+test('Tabby selection stays separate; disabled Ziina leaves Stripe as Pay Now', () => {
+  assert.match(html, /if\(selectedPayMethod\(\)==='tabby'\)return startTabbyCheckout\(button,data,id\)/);
+  assert.match(html, /const endpoint=ziina\?'\/api\/ziina-checkout':'\/api\/checkout-session'/);
+  assert.match(html, /fetch\(endpoint,\{method:'POST',headers,body:JSON\.stringify\(\{id,customer:data,cart,payment_currency:data\.payment_currency==='usd'\?'usd':'aed'\}\)\}\)/);
 });
 
 test('Tabby checkout and verify have clean routes to the commerce function', () => {
@@ -221,7 +221,7 @@ test('the Tabby script loads before the page runs its payment-return handler', (
   // Found on Preview: appended after the main script, handleTabbyReturn did
   // not exist yet when handlePaymentReturn() ran at load.
   const tabbyAt = html.indexOf('<script id="tabby-checkout">');
-  const initAt = html.indexOf('handlePaymentReturn().then');
+  const initAt = html.indexOf("(new URLSearchParams(location.search).get('ziina')?handleZiinaReturn");
   assert.ok(tabbyAt > 0 && initAt > tabbyAt, 'tabby-checkout must come before the load-time handlePaymentReturn() call');
 });
 

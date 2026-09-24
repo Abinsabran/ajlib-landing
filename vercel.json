@@ -8,6 +8,9 @@
     },
     "api/commerce.js": {
       "maxDuration": 60
+    },
+    "api/ziina.js": {
+      "maxDuration": 60
     }
   },
   "rewrites": [
@@ -58,6 +61,22 @@
     {
       "source": "/api/fulfillment-sync",
       "destination": "/api/commerce?resource=fulfillment-sync"
+    },
+    {
+      "source": "/api/ziina-checkout",
+      "destination": "/api/ziina?action=checkout"
+    },
+    {
+      "source": "/api/ziina-availability",
+      "destination": "/api/ziina?action=availability"
+    },
+    {
+      "source": "/api/ziina-verify",
+      "destination": "/api/ziina?action=verify"
+    },
+    {
+      "source": "/api/ziina-webhook",
+      "destination": "/api/ziina?action=webhook"
     }
   ],
   "headers": [

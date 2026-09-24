@@ -246,8 +246,10 @@ test('a session that cannot be refreshed is cleared instead of sending a dead to
 
 test('checkout (Stripe and Tabby) and every Supabase call refresh the session before sending the token', () => {
   const guarded = [...html.matchAll(/if\(typeof ensureFreshSession==='function'\)await ensureFreshSession\(\);const headers=\{'Content-Type':'application\/json'\};if\(authSession\?\.access_token\)headers\.Authorization='Bearer '\+authSession\.access_token;/g)];
-  assert.equal(guarded.length, 3);
-  assert.match(fnSource('submitOrder').split('\n')[0] + html.slice(html.lastIndexOf('async function submitOrder(')), /await ensureFreshSession\(\)/);
+  assert.equal(guarded.length, 2);
+  const currentCheckout = html.slice(html.lastIndexOf('async function submitOrder('));
+  assert.match(currentCheckout, /await ensureFreshSession\(\)/);
+  assert.match(currentCheckout, /if\(authSession\?\.access_token\)headers\.Authorization='Bearer '\+authSession\.access_token/);
   assert.match(fnSource('supabaseRequest'), /if\(token===undefined\)\{await ensureFreshSession\(\);token=authSession\?\.access_token\}/);
   assert.match(fnSource('customerApi'), /await ensureFreshSession\(\)/);
 });

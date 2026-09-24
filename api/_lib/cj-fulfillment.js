@@ -16,6 +16,7 @@ import {
   selectLogisticsMethod, MIN_ACCEPTABLE_MARGIN_PERCENT, CJ_BALANCE_LOW_WARNING_AED,
   classifyMargin, MARGIN_BANDS, CJ_MARGIN_AUTO_PERCENT, PROFIT_GUARD_MIN_MARGIN_PERCENT, PROFIT_GUARD_MIN_NET_PROFIT_AED,
   STRIPE_FEE_PERCENT, STRIPE_FEE_FIXED_AED, STRIPE_INTERNATIONAL_SURCHARGE_PERCENT, STRIPE_CURRENCY_CONVERSION_PERCENT, TABBY_FEE_PERCENT, TABBY_FEE_FIXED_AED,
+  ZIINA_FEE_PERCENT, ZIINA_FEE_FIXED_AED, ZIINA_SURCHARGE_PERCENT, ZIINA_FEE_VAT_PERCENT,
   CJ_CUSTOMIZATION_COST_USD_PER_UNIT, OTHER_VARIABLE_COST_USD_PER_ORDER
 } from './logistics-policy.js';
 import { AJLIB_DEFAULT_SHOP_ID, AJLIB_PLATFORM_PRODUCT_ID } from './cj-store-connection.js';
@@ -220,7 +221,7 @@ export const checkCjBalance = async (requiredUSD) => {
 
 // ---- Payment processing fee (a real per-order variable cost) ----------------
 // Returns the processing fee in USD for an order collected in AED fils.
-// provider: 'stripe' | 'tabby'. A null fee (Tabby's unpublished negotiated
+// provider: 'stripe' | 'tabby' | 'ziina'. A null fee (Tabby's unpublished negotiated
 // rate, when not configured) yields null — "cannot evaluate", which blocks
 // margin approval rather than silently understating cost.
 export const paymentFeeUSD = ({ amountCollectedFils, provider = 'stripe', international = false, currencyConversion = false }) => {
@@ -229,6 +230,13 @@ export const paymentFeeUSD = ({ amountCollectedFils, provider = 'stripe', intern
     if (TABBY_FEE_PERCENT == null) return null;
     // Confirmed UAE rate: 6.99% + AED 1.50 per transaction.
     return aedToUsd(amountAed * (TABBY_FEE_PERCENT / 100) + TABBY_FEE_FIXED_AED);
+  }
+  if (provider === 'ziina') {
+    // Card origin can be absent from the completed intent. A conservative
+    // international/non-AED surcharge is therefore charged once, not twice.
+    // Actual fee_amount is retained but not used here until Ziina confirms
+    // its currency/denomination for multi-currency intents.
+    return aedToUsd((amountAed * ((ZIINA_FEE_PERCENT + ZIINA_SURCHARGE_PERCENT) / 100) + ZIINA_FEE_FIXED_AED) * (1 + ZIINA_FEE_VAT_PERCENT / 100));
   }
   const percent = STRIPE_FEE_PERCENT
     + (international ? STRIPE_INTERNATIONAL_SURCHARGE_PERCENT : 0)
@@ -242,12 +250,12 @@ export const paymentFeeUSD = ({ amountCollectedFils, provider = 'stripe', intern
 // per-order variable cost.
 export const computeTrueVariableCost = ({
   cjProductCostUSD, cjShippingCostUSD, unitCount = 0,
-  amountCollectedFils, provider = 'stripe', international = false, currencyConversion = false,
+  amountCollectedFils, paymentFeeBaseFils = amountCollectedFils, provider = 'stripe', international = false, currencyConversion = false,
   customizationCostPerUnitUSD = CJ_CUSTOMIZATION_COST_USD_PER_UNIT,
   otherVariableCostUSD = OTHER_VARIABLE_COST_USD_PER_ORDER
 }) => {
   const customizationUSD = Number(customizationCostPerUnitUSD || 0) * Number(unitCount || 0);
-  const feeUSD = paymentFeeUSD({ amountCollectedFils, provider, international, currencyConversion });
+  const feeUSD = paymentFeeUSD({ amountCollectedFils: paymentFeeBaseFils, provider, international, currencyConversion });
   if (feeUSD == null) {
     return { total: null, reason: 'PAYMENT_FEE_NOT_CONFIGURED', breakdown: { provider } };
   }
@@ -286,6 +294,7 @@ export const computeTrueVariableCost = ({
 // "cannot be safely evaluated" and blocks — never as "no limit".
 export const evaluateFulfillmentMargin = ({
   productAmountCollectedFils, shippingAmountCollectedFils, // what AJLIB actually collected, AED fils (server-authoritative, from the order row)
+  providerSettledAmountAedFils = null,
   cjProductCostUSD, cjShippingCostUSD, // from getCurrentCjProductCosts / resolveFreightAndLogistics
   aedToUsdRate = AED_TO_USD,
   minAcceptableMarginPercent = MIN_ACCEPTABLE_MARGIN_PERCENT,
@@ -297,8 +306,13 @@ export const evaluateFulfillmentMargin = ({
   }
 
   const amountCollectedFils = Number(productAmountCollectedFils || 0) + Number(shippingAmountCollectedFils || 0);
+  if (provider === 'ziina' && (!Number.isSafeInteger(providerSettledAmountAedFils) || providerSettledAmountAedFils <= 0)) {
+    return { approved: false, reason: 'ZIINA_SETTLEMENT_UNAVAILABLE', band: MARGIN_BANDS.BLOCK, details: {} };
+  }
+  const revenueFils = provider === 'ziina' ? Math.min(amountCollectedFils, providerSettledAmountAedFils) : amountCollectedFils;
+  const feeBaseFils = provider === 'ziina' ? Math.max(amountCollectedFils, providerSettledAmountAedFils) : amountCollectedFils;
   const variable = computeTrueVariableCost({
-    cjProductCostUSD, cjShippingCostUSD, unitCount, amountCollectedFils,
+    cjProductCostUSD, cjShippingCostUSD, unitCount, amountCollectedFils: revenueFils, paymentFeeBaseFils: feeBaseFils,
     provider, international, currencyConversion, customizationCostPerUnitUSD, otherVariableCostUSD
   });
   if (variable.total == null) {
@@ -307,7 +321,7 @@ export const evaluateFulfillmentMargin = ({
     return { approved: false, reason: variable.reason, band: MARGIN_BANDS.BLOCK, details: { breakdown: variable.breakdown } };
   }
 
-  const collectedUSD = (amountCollectedFils / 100) * aedToUsdRate;
+  const collectedUSD = (revenueFils / 100) * aedToUsdRate;
   const marginUSD = collectedUSD - variable.total;
   const marginPercent = collectedUSD > 0 ? (marginUSD / collectedUSD) * 100 : -100;
   const band = classifyMargin(marginPercent);
@@ -323,7 +337,7 @@ export const evaluateFulfillmentMargin = ({
     approved, band, reason,
     details: {
       collectedUSD,
-      collectedAed: amountCollectedFils / 100,
+      collectedAed: revenueFils / 100,
       fulfillmentCostUSD: variable.total, // true variable cost
       marginUSD, marginPercent, netProfitAed,
       minMarginPercent: PROFIT_GUARD_MIN_MARGIN_PERCENT,
@@ -571,13 +585,15 @@ export const prepareFulfillment = async (orderRow, {
     margin: evaluateFulfillmentMargin({
       productAmountCollectedFils: orderRow.product_amount || 0,
       shippingAmountCollectedFils: orderRow.shipping_amount || 0,
+      providerSettledAmountAedFils: orderRow.provider_settled_amount_aed,
       cjProductCostUSD,
       cjShippingCostUSD: candidate.cost,
       aedToUsdRate,
       minAcceptableMarginPercent,
       unitCount,
       // Which provider actually collected the money determines the real fee.
-      provider: String(orderRow.stripe_session_id || '').startsWith('tabby_') ? 'tabby' : 'stripe',
+      provider: orderRow.payment_provider === 'ziina' || String(orderRow.stripe_session_id || '').startsWith('ziina_')
+        ? 'ziina' : String(orderRow.stripe_session_id || '').startsWith('tabby_') ? 'tabby' : 'stripe',
       // Stripe's surcharges, read conservatively: a non-UAE destination is
       // treated as a non-UAE card, and a USD payment needs conversion.
       international: String(destinationCountryCode || '').toUpperCase() !== 'AE',
